@@ -262,23 +262,27 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbymKvDkRyWPAMgm9YOh9h54
 
 // ─────────────────────────────────────────────
 
-// 从 Google Sheets 动态载入专业清单
-async function loadDepartments() {
+// 备援科系清单（GAS 无法连线时使用）
+const DEFAULT_DEPARTMENTS = ['国际商务','金融会计','创意设计','旅游管理'];
+
+function fillDeptSelect(depts) {
   const sel = document.getElementById('studentDeptInput');
-  sel.innerHTML = '<option value="">载入中…</option>';
+  sel.innerHTML = '<option value="">-- 请选择专业 --</option>' +
+    depts.map(d => `<option value="${d}">${d}</option>`).join('');
+}
+
+async function loadDepartments() {
   try {
     const res = await api('GET', { action: 'getDepartments' });
     if (res.success && res.departments.length) {
-      sel.innerHTML = '<option value="">-- 请选择专业 --</option>' +
-        res.departments.map(d => `<option value="${d}">${d}</option>`).join('');
+      fillDeptSelect(res.departments);
     } else {
-      sel.innerHTML = '<option value="">-- 请选择专业 --</option>';
+      fillDeptSelect(DEFAULT_DEPARTMENTS);
     }
   } catch (e) {
-    sel.innerHTML = '<option value="">-- 请选择专业 --</option>';
+    fillDeptSelect(DEFAULT_DEPARTMENTS);
   }
 }
-loadDepartments();
 
 let currentStudent = null;
 let questions      = [];
