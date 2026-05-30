@@ -631,25 +631,33 @@ function renderStudentsTable(students) {
   if (!students.length) {
     document.getElementById('studentsTable').innerHTML = '<p style="color:var(--gray-500);font-size:.88rem">无数据</p>'; return;
   }
+  const val = v => (v !== '' && v !== null && v !== undefined) ? v : '—';
   const rows = students.map(s => {
-    const need        = s.needExam===true||s.needExam==='TRUE';
-    const pass        = s.passed===true||s.passed==='TRUE';
-    const hasUniScore = s.uniScore!==''&&s.uniScore!=null&&s.uniScore!==undefined;
+    const need           = s.needExam===true||s.needExam==='TRUE';
+    const pass           = s.passed===true||s.passed==='TRUE';
+    const hasSecondScore = s.secondScore!==''&&s.secondScore!=null&&s.secondScore!==undefined;
+    const hasFirstScore  = s.firstScore!==''&&s.firstScore!=null&&s.firstScore!==undefined;
     const badge =
-      pass                  ? '<span class="badge badge-green">院考通过</span>'
-      : (!need && hasUniScore) ? '<span class="badge badge-blue">大学测验通过</span>'
-      : need                ? '<span class="badge badge-yellow">待院考</span>'
-      :                       '<span class="badge badge-gray">未上传成绩</span>';
+      pass             ? '<span class="badge badge-green">院考通过</span>'
+      : hasSecondScore && !need ? '<span class="badge badge-blue">第二次测验通过</span>'
+      : need           ? '<span class="badge badge-yellow">待院考</span>'
+      : hasFirstScore  ? '<span class="badge badge-gray">待第二次测验</span>'
+      :                  '<span class="badge badge-gray">未上传成绩</span>';
     const d = s.lastExamDate ? new Date(s.lastExamDate).toLocaleDateString('zh-CN') : '—';
-    return `<tr><td>${s.studentId}</td><td>${s.name}</td><td>${s.dept}</td>
-      <td>${s.uniScore!==''&&s.uniScore!=null?s.uniScore:'—'}</td>
+    return `<tr>
+      <td>${s.studentId}</td><td>${s.name}</td><td>${val(s.dept)}</td>
+      <td>${val(s.firstScore)}</td>
+      <td>${val(s.secondScore)}</td>
       <td>${badge}</td>
-      <td>${s.bestScore!==''&&s.bestScore!=null?s.bestScore:'—'}</td>
+      <td>${val(s.bestScore)}</td>
       <td>${d}</td></tr>`;
   }).join('');
   document.getElementById('studentsTable').innerHTML = `
-    <table><thead><tr><th>学号</th><th>姓名</th><th>系级</th><th>大学测验分数</th>
-    <th>状态</th><th>院考最高分</th><th>最后考试日期</th></tr></thead>
+    <table><thead><tr>
+      <th>学号</th><th>姓名</th><th>专业</th>
+      <th>第一次测验分数</th><th>第二次测验分数</th>
+      <th>状态</th><th>院考最高分</th><th>最后考试日期</th>
+    </tr></thead>
     <tbody>${rows}</tbody></table>`;
 }
 
@@ -748,12 +756,17 @@ async function loadExport() {
 function exportStudentsXLSX() {
   if (!exportCache) return;
   downloadXLSX(exportCache.students.map(s => ({
-    '学号':s['学号'],'姓名':s['姓名'],'系级':s['系级'],
-    '大学测验分数':s['大学测验分数'],
-    '需院考':s['需院考']?'是':'否',
-    '院考最高分':s['院考最高分'],
-    '院考通过':s['院考通过']?'是':'否',
-    '最后考试日期':s['最后考试日期']
+    '学号'          : s['学号'],
+    '姓名'          : s['姓名'],
+    '专业'          : s['专业'],
+    '第一次测验分数' : s['第一次测验分数'],
+    '第一次测验日期' : s['第一次测验日期'],
+    '第二次测验分数' : s['第二次测验分数'],
+    '第二次测验日期' : s['第二次测验日期'],
+    '需院考'        : s['需院考'] ? '是' : '否',
+    '院考最高分'     : s['院考最高分'],
+    '院考通过'      : s['院考通过'] ? '是' : '否',
+    '最后考试日期'   : s['最后考试日期']
   })), '学生清单');
 }
 
