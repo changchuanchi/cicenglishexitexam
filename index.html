@@ -61,8 +61,8 @@
   input[type="text"], select {
     width: 100%; padding: 12px 14px;
     border: 1.5px solid var(--gray-200); border-radius: 8px;
-    font-size: 1rem; outline: none; transition: border .2s;
-    background: #fff; appearance: auto;
+    font-size: 1rem; font-family: inherit; outline: none; transition: border .2s;
+    background: #fff;
   }
   input[type="text"]:focus, select:focus { border-color: var(--primary); }
 
@@ -189,6 +189,9 @@
 <div class="logo">
   <h1>学院英文毕业考试系统</h1>
   <p>College English Graduation Examination</p>
+  <a href="admin.html" style="display:inline-block;margin-top:10px;font-size:.85rem;
+     color:var(--primary);text-decoration:none;border:1.5px solid var(--primary);
+     border-radius:7px;padding:5px 16px;">管理员入口</a>
 </div>
 
 <!-- ①登录 -->
@@ -211,10 +214,6 @@
   <p style="font-size:.8rem;color:var(--gray-600);margin-top:10px;text-align:center">
     考试开始后计时即刻启动，共 50 题，时间 60 分钟
   </p>
-  <hr style="border:none;border-top:1px solid var(--gray-200);margin:20px 0">
-  <a href="admin.html" class="btn btn-outline" style="width:100%;display:block;text-align:center;text-decoration:none">
-    管理员入口
-  </a>
 </div>
 
 <!-- ③考试 -->
