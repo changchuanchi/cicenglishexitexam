@@ -56,7 +56,7 @@
   .tab:hover { color:var(--primary); }
   .tab.active { color:var(--primary); border-bottom-color:var(--primary); font-weight:600; }
 
-  .content { flex:1; padding:20px 16px; max-width:480px; margin:0 auto; width:100%; }
+  .content { flex:1; padding:28px 32px; max-width:1280px; margin:0 auto; width:100%; }
   .panel { display:none; }
   .panel.active { display:block; }
 
@@ -148,16 +148,27 @@
   .modal-footer { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; }
 
   .search-bar { display:flex; gap:10px; margin-bottom:16px; align-items:center; flex-wrap:wrap; }
-  .search-bar input { width:100%; max-width:100%; margin:0; }
+  .search-bar input { max-width:360px; margin:0; }
 
-  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .stats-grid { grid-template-columns: repeat(4, 1fr); }
 
+  /* 桌面版增强 */
+  table { font-size:.88rem; }
+  thead th { padding:12px 14px; }
+  tbody td { padding:10px 14px; }
+
+  @media(max-width:900px){
+    .content{ padding:20px 16px; }
+    .stats-grid{ grid-template-columns: repeat(2, 1fr); }
+    .search-bar input { max-width:100%; }
+  }
   @media(max-width:600px){
-    .content{padding:12px;}
-    .tabs{padding:0 4px;}
-    .tab{padding:10px 8px; font-size:.8rem;}
-    .topbar{padding:0 12px;}
-    .topbar-title{font-size:.88rem;}
+    .content{ padding:12px; }
+    .tabs{ padding:0 4px; }
+    .tab{ padding:10px 8px; font-size:.8rem; }
+    .topbar{ padding:0 12px; }
+    .topbar-title{ font-size:.88rem; }
+    .stats-grid{ grid-template-columns: repeat(2, 1fr); }
   }
 </style>
 </head>
@@ -225,7 +236,7 @@
           ondrop="handleDrop(event)">
           <div class="upload-icon">📁</div>
           <div>点击或拖曳上传 <strong>CSV / XLSX</strong> 文件</div>
-          <div class="upload-hint">栏位顺序：学号、姓名、系级、大学测验分数</div>
+          <div class="upload-hint">支持 DPU-TEP 报表（自动识别）或标准格式：学号、姓名、专业、分数</div>
         </div>
         <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" onchange="handleFileSelect(event)">
       </div>
@@ -244,7 +255,7 @@
       <div class="card">
         <div class="card-title">学生考试状态总览</div>
         <div class="search-bar">
-          <input type="text" id="studentSearch" placeholder="搜索学号、姓名或系级" oninput="filterStudents()">
+          <input type="text" id="studentSearch" placeholder="搜索学号、姓名或专业" oninput="filterStudents()">
           <button class="btn btn-outline" onclick="loadStudents()">刷新</button>
         </div>
         <div id="studentsAlert"></div>
@@ -552,7 +563,7 @@ function parseFile(file) {
         }));
       showEl('uploadAlert', `已识别为 DPU-TEP 格式，共解析 ${uploadData.length} 笔（缺考已略过）`, 'info');
     } else {
-      // 标准格式：学号、姓名、系级、分数
+      // 标准格式：学号、姓名、专业、分数
       const start = (rows.length && isNaN(Number(rows[0][0]))) ? 1 : 0;
       uploadData = rows.slice(start)
         .filter(r => r[0] && String(r[0]).trim())
@@ -576,10 +587,10 @@ function renderPreview() {
   document.getElementById('previewCount').textContent = uploadData.length;
   const rows = uploadData.slice(0,20).map(r =>
     `<tr><td>${r.studentId}</td><td>${r.name}</td><td>${r.dept}</td><td>${r.score}</td>
-     <td><span class="badge ${r.score<39?'badge-yellow':'badge-green'}">${r.score<39?'需院考':'通过'}</span></td></tr>`
+     <td><span class="badge ${r.score<39?'badge-yellow':'badge-green'}">${r.score<39?'待院考':'通过'}</span></td></tr>`
   ).join('');
   document.getElementById('previewTable').innerHTML = `
-    <table><thead><tr><th>学号</th><th>姓名</th><th>系级</th><th>分数</th><th>状态</th></tr></thead>
+    <table><thead><tr><th>学号</th><th>姓名</th><th>专业</th><th>分数</th><th>状态</th></tr></thead>
     <tbody>${rows}</tbody></table>
     ${uploadData.length>20?'<p style="font-size:.82rem;color:var(--gray-500);margin-top:8px">仅显示前 20 笔</p>':''}`;
   document.getElementById('previewCard').style.display = '';
@@ -747,7 +758,7 @@ async function loadExport() {
     const s = res.summary;
     document.getElementById('statsGrid').innerHTML = `
       <div class="stat-card"><div class="stat-num">${s.total}</div><div class="stat-label">学生总数</div></div>
-      <div class="stat-card"><div class="stat-num">${s.needExam}</div><div class="stat-label">需院考人数</div></div>
+      <div class="stat-card"><div class="stat-num">${s.needExam}</div><div class="stat-label">待院考人数</div></div>
       <div class="stat-card"><div class="stat-num">${s.passed}</div><div class="stat-label">院考通过人数</div></div>
       <div class="stat-card"><div class="stat-num">${s.examCount}</div><div class="stat-label">考试次数</div></div>`;
   } catch {}
@@ -763,7 +774,7 @@ function exportStudentsXLSX() {
     '第一次测验日期' : s['第一次测验日期'],
     '第二次测验分数' : s['第二次测验分数'],
     '第二次测验日期' : s['第二次测验日期'],
-    '需院考'        : s['需院考'] ? '是' : '否',
+    '状态'          : s['状态'] ? '待院考' : '通过',
     '院考最高分'     : s['院考最高分'],
     '院考通过'      : s['院考通过'] ? '是' : '否',
     '最后考试日期'   : s['最后考试日期']
