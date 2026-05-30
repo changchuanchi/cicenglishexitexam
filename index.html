@@ -58,12 +58,13 @@
 
   .form-group { margin-bottom: 18px; }
   label { display: block; font-size: .85rem; font-weight: 500; margin-bottom: 6px; color: var(--gray-700); }
-  input[type="text"] {
+  input[type="text"], select {
     width: 100%; padding: 12px 14px;
     border: 1.5px solid var(--gray-200); border-radius: 8px;
     font-size: 1rem; outline: none; transition: border .2s;
+    background: #fff; appearance: auto;
   }
-  input[type="text"]:focus { border-color: var(--primary); }
+  input[type="text"]:focus, select:focus { border-color: var(--primary); }
 
   .btn {
     display: inline-block; padding: 12px 24px;
@@ -190,15 +191,6 @@
   <p>College English Graduation Examination</p>
 </div>
 
-<a href="admin.html"
-   style="position:fixed;bottom:20px;right:20px;z-index:9999;
-          font-size:.78rem;color:#6b7280;text-decoration:none;
-          background:#ffffff;border:1px solid #d1d5db;border-radius:8px;
-          padding:7px 14px;box-shadow:0 2px 8px rgba(0,0,0,.12);
-          display:block;">
-  管理员入口
-</a>
-
 <!-- ①登录 -->
 <div class="card screen active" id="loginScreen">
   <h2>学生考试登记</h2>
@@ -219,6 +211,10 @@
   <p style="font-size:.8rem;color:var(--gray-600);margin-top:10px;text-align:center">
     考试开始后计时即刻启动，共 50 题，时间 60 分钟
   </p>
+  <hr style="border:none;border-top:1px solid var(--gray-200);margin:20px 0">
+  <a href="admin.html" class="btn btn-outline" style="width:100%;display:block;text-align:center;text-decoration:none">
+    管理员入口
+  </a>
 </div>
 
 <!-- ③考试 -->
