@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>学院英文毕业考试 — 管理员后台</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --primary: #2563eb; --primary-dark: #1d4ed8;
+    --success: #16a34a; --danger: #dc2626; --warning: #d97706;
+    --gray-50: #f9fafb; --gray-100: #f3f4f6; --gray-200: #e5e7eb;
+    --gray-300: #d1d5db; --gray-500: #6b7280; --gray-600: #4b5563;
+    --gray-700: #374151; --gray-900: #111827;
+    --radius: 10px; --shadow: 0 2px 16px rgba(0,0,0,.08);
+  }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    background:var(--gray-50); color:var(--gray-900); min-height:100vh; }
+
+  /* ── Login ── */
+  #loginWrap {
+    display:flex; align-items:center; justify-content:center;
+    min-height:100vh; padding:20px;
+    background:linear-gradient(135deg,#eff6ff,#e0f2fe);
+  }
+  .login-card {
+    background:#fff; border-radius:14px; box-shadow:var(--shadow);
+    padding:40px; width:100%; max-width:380px;
+  }
+  .login-card h1 { font-size:1.3rem; font-weight:700; margin-bottom:4px; }
+  .login-card p  { font-size:.85rem; color:var(--gray-500); margin-bottom:24px; }
+
+  /* ── Shell ── */
+  #appWrap { display:none; flex-direction:column; min-height:100vh; }
+  .topbar {
+    background:var(--primary-dark); color:#fff;
+    padding:0 24px; height:54px;
+    display:flex; align-items:center; justify-content:space-between;
+    position:sticky; top:0; z-index:100; gap:12px;
+  }
+  .topbar-title { font-weight:700; font-size:1rem; white-space:nowrap; }
+  .topbar-right { display:flex; align-items:center; gap:10px; font-size:.84rem; }
+  .topbar-name  { opacity:.85; white-space:nowrap; }
+
+  .tabs {
+    background:#fff; border-bottom:1px solid var(--gray-200);
+    display:flex; padding:0 24px; gap:0; overflow-x:auto;
+    position:sticky; top:54px; z-index:99;
+  }
+  .tab {
+    padding:13px 18px; font-size:.87rem; font-weight:500; cursor:pointer;
+    border-bottom:2.5px solid transparent; color:var(--gray-500);
+    transition:all .15s; white-space:nowrap; flex-shrink:0;
+  }
+  .tab:hover { color:var(--primary); }
+  .tab.active { color:var(--primary); border-bottom-color:var(--primary); font-weight:600; }
+
+  .content { flex:1; padding:28px 24px; max-width:1100px; margin:0 auto; width:100%; }
+  .panel { display:none; }
+  .panel.active { display:block; }
+
+  /* ── Cards ── */
+  .card { background:#fff; border-radius:var(--radius); box-shadow:var(--shadow); padding:24px; margin-bottom:20px; }
+  .card-title { font-size:1rem; font-weight:600; margin-bottom:16px; color:var(--gray-700); }
+
+  /* ── Buttons ── */
+  .btn { display:inline-block; padding:9px 18px; border:none; border-radius:7px;
+    cursor:pointer; font-size:.87rem; font-weight:600; transition:all .15s; }
+  .btn-primary { background:var(--primary); color:#fff; }
+  .btn-primary:hover { background:var(--primary-dark); }
+  .btn-primary:disabled { background:var(--gray-200); color:var(--gray-500); cursor:not-allowed; }
+  .btn-success { background:var(--success); color:#fff; }
+  .btn-success:hover { filter:brightness(1.08); }
+  .btn-danger  { background:var(--danger); color:#fff; }
+  .btn-danger:hover  { filter:brightness(1.08); }
+  .btn-warning { background:var(--warning); color:#fff; }
+  .btn-warning:hover { filter:brightness(1.08); }
+  .btn-outline { background:transparent; border:1.5px solid var(--gray-300); color:var(--gray-700); }
+  .btn-outline:hover { background:var(--gray-50); }
+  .btn-ghost   { background:transparent; border:1.5px solid rgba(255,255,255,.35); color:#fff; }
+  .btn-ghost:hover { background:rgba(255,255,255,.12); }
+  .btn-sm { padding:5px 12px; font-size:.8rem; }
+
+  /* ── Forms ── */
+  .form-row { display:flex; gap:12px; flex-wrap:wrap; }
+  .form-group { margin-bottom:14px; }
+  .form-group label { display:block; font-size:.82rem; font-weight:500; margin-bottom:5px; color:var(--gray-600); }
+  input[type="text"],input[type="password"],select,textarea {
+    width:100%; padding:9px 12px; border:1.5px solid var(--gray-200); border-radius:7px;
+    font-size:.9rem; outline:none; transition:border .2s; font-family:inherit;
+  }
+  input:focus,select:focus,textarea:focus { border-color:var(--primary); }
+
+  /* ── Tables ── */
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:.85rem; }
+  thead th {
+    background:var(--gray-50); padding:10px 12px; text-align:left;
+    font-weight:600; color:var(--gray-600); border-bottom:1.5px solid var(--gray-200);
+    white-space:nowrap;
+  }
+  tbody td { padding:9px 12px; border-bottom:1px solid var(--gray-100); }
+  tbody tr:hover { background:var(--gray-50); }
+
+  .badge { display:inline-block; padding:2px 9px; border-radius:99px; font-size:.76rem; font-weight:600; }
+  .badge-green  { background:#dcfce7; color:var(--success); }
+  .badge-red    { background:#fee2e2; color:var(--danger); }
+  .badge-yellow { background:#fef9c3; color:var(--warning); }
+  .badge-blue   { background:#dbeafe; color:var(--primary); }
+  .badge-gray   { background:var(--gray-100); color:var(--gray-600); }
+
+  .alert { padding:11px 15px; border-radius:7px; font-size:.86rem; margin-bottom:14px; }
+  .alert-error   { background:#fee2e2; color:var(--danger); }
+  .alert-success { background:#dcfce7; color:var(--success); }
+  .alert-info    { background:#eff6ff; color:var(--primary); }
+  .alert-warning { background:#fef9c3; color:var(--warning); }
+
+  /* ── Upload ── */
+  .upload-zone {
+    border:2px dashed var(--gray-300); border-radius:10px;
+    padding:36px; text-align:center; cursor:pointer;
+    transition:all .2s; color:var(--gray-500);
+  }
+  .upload-zone:hover,.upload-zone.dragover { border-color:var(--primary); color:var(--primary); background:#eff6ff; }
+  .upload-icon { font-size:2.5rem; margin-bottom:8px; }
+  .upload-hint { font-size:.82rem; margin-top:6px; }
+  #fileInput { display:none; }
+
+  /* ── Stats ── */
+  .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; margin-bottom:20px; }
+  .stat-card { background:#fff; border-radius:var(--radius); box-shadow:var(--shadow); padding:18px; text-align:center; }
+  .stat-num   { font-size:2rem; font-weight:800; color:var(--primary); }
+  .stat-label { font-size:.8rem; color:var(--gray-500); margin-top:4px; }
+
+  /* ── Modal ── */
+  .modal-bg {
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.45);
+    z-index:200; align-items:center; justify-content:center; padding:20px;
+  }
+  .modal-bg.open { display:flex; }
+  .modal {
+    background:#fff; border-radius:14px; padding:28px;
+    width:100%; max-width:520px; max-height:92vh; overflow-y:auto;
+    box-shadow:0 8px 40px rgba(0,0,0,.2);
+  }
+  .modal h3 { font-size:1.1rem; font-weight:700; margin-bottom:18px; }
+  .modal-footer { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; }
+
+  .search-bar { display:flex; gap:10px; margin-bottom:16px; align-items:center; flex-wrap:wrap; }
+  .search-bar input { max-width:280px; margin:0; }
+
+  @media(max-width:600px){
+    .content{padding:16px;}
+    .tabs{padding:0 8px;}
+    .tab{padding:12px 10px; font-size:.82rem;}
+    .topbar{padding:0 14px;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ── 登录 ── -->
+<div id="loginWrap">
+  <div class="login-card">
+    <h1>管理员后台</h1>
+    <p>English Graduation Exam Admin Panel</p>
+    <div id="loginAlert" class="alert alert-error" style="display:none"></div>
+    <div class="form-group">
+      <label>员工号</label>
+      <input type="text" id="empIdInput" placeholder="输入员工号" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label>密码</label>
+      <input type="password" id="passwordInput" placeholder="输入密码"
+        onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn btn-primary" style="width:100%" id="loginBtn" onclick="doLogin()">登录</button>
+  </div>
+</div>
+
+<!-- ── 主界面 ── -->
+<div id="appWrap">
+  <div class="topbar">
+    <span class="topbar-title">英文毕业考试 — 管理后台</span>
+    <div class="topbar-right">
+      <span class="topbar-name" id="topbarName"></span>
+      <button class="btn btn-ghost btn-sm" onclick="openChangePwModal()">修改密码</button>
+      <button class="btn btn-ghost btn-sm" onclick="doLogout()">登出</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="upload"    onclick="switchTab(this,'upload')">批次上传成绩</div>
+    <div class="tab"        data-tab="students"  onclick="switchTab(this,'students')">学生总览</div>
+    <div class="tab"        data-tab="questions" onclick="switchTab(this,'questions')">题库管理</div>
+    <div class="tab"        data-tab="export"    onclick="switchTab(this,'export')">导出报表</div>
+    <div class="tab"        data-tab="accounts"  onclick="switchTab(this,'accounts')">账号管理</div>
+  </div>
+
+  <div class="content">
+
+    <!-- ① 批次上传 -->
+    <div class="panel active" id="panel-upload">
+      <div class="card">
+        <div class="card-title">批次上传大学电脑测验成绩</div>
+        <div id="uploadAlert"></div>
+        <div class="upload-zone" id="uploadZone"
+          onclick="document.getElementById('fileInput').click()"
+          ondragover="event.preventDefault();this.classList.add('dragover')"
+          ondragleave="this.classList.remove('dragover')"
+          ondrop="handleDrop(event)">
+          <div class="upload-icon">📁</div>
+          <div>点击或拖曳上传 <strong>CSV / XLSX</strong> 文件</div>
+          <div class="upload-hint">栏位顺序：学号、姓名、系级、大学测验分数</div>
+        </div>
+        <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" onchange="handleFileSelect(event)">
+      </div>
+      <div class="card" id="previewCard" style="display:none">
+        <div class="card-title">数据预览（共 <span id="previewCount">0</span> 笔）</div>
+        <div class="table-wrap" id="previewTable"></div>
+        <div style="margin-top:16px;display:flex;gap:10px">
+          <button class="btn btn-success" id="confirmUploadBtn" onclick="confirmUpload()">确认上传</button>
+          <button class="btn btn-outline" onclick="cancelPreview()">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ② 学生总览 -->
+    <div class="panel" id="panel-students">
+      <div class="card">
+        <div class="card-title">学生考试状态总览</div>
+        <div class="search-bar">
+          <input type="text" id="studentSearch" placeholder="搜索学号、姓名或系级" oninput="filterStudents()">
+          <button class="btn btn-outline" onclick="loadStudents()">刷新</button>
+        </div>
+        <div id="studentsAlert"></div>
+        <div class="table-wrap" id="studentsTable"><p style="color:var(--gray-500);font-size:.88rem">加载中…</p></div>
+      </div>
+    </div>
+
+    <!-- ③ 题库管理 -->
+    <div class="panel" id="panel-questions">
+      <div class="card">
+        <div class="card-title">题库管理</div>
+        <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center">
+          <button class="btn btn-primary" onclick="openQuestionModal(null)">＋ 新增题目</button>
+          <span id="questionCount" style="font-size:.85rem;color:var(--gray-500)"></span>
+        </div>
+        <div id="questionsAlert"></div>
+        <div class="table-wrap" id="questionsTable"><p style="color:var(--gray-500);font-size:.88rem">加载中…</p></div>
+      </div>
+    </div>
+
+    <!-- ④ 导出报表 -->
+    <div class="panel" id="panel-export">
+      <div id="statsGrid" class="stats-grid"></div>
+      <div class="card">
+        <div class="card-title">导出数据</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="exportStudentsXLSX()">导出学生清单 (.xlsx)</button>
+          <button class="btn btn-outline" onclick="exportRecordsXLSX()">导出考试记录 (.xlsx)</button>
+          <button class="btn btn-outline" onclick="loadExport()">刷新统计</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑤ 账号管理 -->
+    <div class="panel" id="panel-accounts">
+      <div class="card">
+        <div class="card-title">管理员账号</div>
+        <div style="display:flex;gap:10px;margin-bottom:16px">
+          <button class="btn btn-primary" onclick="openAddAdminModal()">＋ 新增管理员</button>
+          <button class="btn btn-outline" onclick="loadAdmins()">刷新</button>
+        </div>
+        <div id="accountsAlert"></div>
+        <div class="table-wrap" id="adminsTable"><p style="color:var(--gray-500);font-size:.88rem">加载中…</p></div>
+        <p style="margin-top:12px;font-size:.82rem;color:var(--gray-500)">
+          预设密码由系统管理员设置于 GAS 程序码中（<code>DEFAULT_PASSWORD</code>）。重设密码后使用者登录时会被强制要求修改。
+        </p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── 修改密码 Modal ── -->
+<div class="modal-bg" id="changePwModal">
+  <div class="modal">
+    <h3>修改密码</h3>
+    <div id="changePwAlert"></div>
+    <div class="form-group">
+      <label>当前密码</label>
+      <input type="password" id="oldPw" placeholder="输入当前密码">
+    </div>
+    <div class="form-group">
+      <label>新密码（至少 6 个字符）</label>
+      <input type="password" id="newPw" placeholder="输入新密码">
+    </div>
+    <div class="form-group">
+      <label>确认新密码</label>
+      <input type="password" id="confirmPw" placeholder="再次输入新密码">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('changePwModal')">取消</button>
+      <button class="btn btn-primary" onclick="submitChangePassword()">确认修改</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 首次登录强制改密码 Modal ── -->
+<div class="modal-bg" id="firstLoginModal">
+  <div class="modal">
+    <h3>首次登录 — 请设置新密码</h3>
+    <div class="alert alert-warning" style="margin-bottom:16px">
+      您使用的是预设密码，请立即修改以保护账号安全。
+    </div>
+    <div id="firstPwAlert"></div>
+    <div class="form-group">
+      <label>当前密码（预设密码）</label>
+      <input type="password" id="firstOldPw" placeholder="输入预设密码">
+    </div>
+    <div class="form-group">
+      <label>新密码（至少 6 个字符）</label>
+      <input type="password" id="firstNewPw" placeholder="设置新密码">
+    </div>
+    <div class="form-group">
+      <label>确认新密码</label>
+      <input type="password" id="firstConfirmPw" placeholder="再次输入新密码">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="submitFirstChangePassword()">设置密码</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 题目 Modal ── -->
+<div class="modal-bg" id="questionModal">
+  <div class="modal">
+    <h3 id="questionModalTitle">新增题目</h3>
+    <input type="hidden" id="editQuestionId">
+    <div class="form-group">
+      <label>题目</label>
+      <textarea id="qText" rows="3" style="resize:vertical"></textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:1;min-width:200px"><label>选项 A</label><input type="text" id="qA"></div>
+      <div class="form-group" style="flex:1;min-width:200px"><label>选项 B</label><input type="text" id="qB"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:1;min-width:200px"><label>选项 C</label><input type="text" id="qC"></div>
+      <div class="form-group" style="flex:1;min-width:200px"><label>选项 D</label><input type="text" id="qD"></div>
+    </div>
+    <div class="form-group">
+      <label>正确答案</label>
+      <select id="qAnswer">
+        <option value="A">A</option><option value="B">B</option>
+        <option value="C">C</option><option value="D">D</option>
+      </select>
+    </div>
+    <div id="qModalAlert"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('questionModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveQuestion()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 新增管理员 Modal ── -->
+<div class="modal-bg" id="addAdminModal">
+  <div class="modal">
+    <h3>新增管理员</h3>
+    <div class="alert alert-info" style="margin-bottom:16px">
+      新账号将使用系统预设密码，使用者首次登录时必须修改密码。
+    </div>
+    <div id="addAdminAlert"></div>
+    <div class="form-group">
+      <label>员工号</label>
+      <input type="text" id="newEmpId" placeholder="输入员工号" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label>姓名</label>
+      <input type="text" id="newAdminName" placeholder="输入姓名">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('addAdminModal')">取消</button>
+      <button class="btn btn-primary" onclick="submitAddAdmin()">建立账号</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── 设置 ────────────────────────────────────────
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxl9pe7AXjT-I8FvC851zub9gTtFfz6F1sR5-1l4Qe82pTcbBVTPWrMOLMbHw-His0i/exec';
+// ────────────────────────────────────────────────
+
+let session = { token: '', name: '', employeeId: '' };
+let allStudents  = [];
+let allQuestions = [];
+let uploadData   = [];
+let exportCache  = null;
+
+// ── 登录 ──
+async function doLogin() {
+  const empId = document.getElementById('empIdInput').value.trim();
+  const pw    = document.getElementById('passwordInput').value;
+  if (!empId || !pw) { showEl('loginAlert', '请输入员工号与密码', 'error'); return; }
+
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true; btn.textContent = '验证中…';
+
+  try {
+    const res = await api('POST', { action:'adminLogin', employeeId: empId, password: pw });
+    if (!res.success) { showEl('loginAlert', res.error || '登录失败', 'error'); return; }
+
+    session = { token: res.token, name: res.name, employeeId: res.employeeId };
+    sessionStorage.setItem('adminSession', JSON.stringify(session));
+
+    document.getElementById('loginWrap').style.display = 'none';
+    document.getElementById('appWrap').style.display   = 'flex';
+    document.getElementById('topbarName').textContent  = `${res.name}（${res.employeeId}）`;
+
+    if (res.mustChange) {
+      document.getElementById('firstLoginModal').classList.add('open');
+    } else {
+      loadAllData();
+    }
+  } catch { showEl('loginAlert', '连线失败，请稍后再试', 'error'); }
+  finally { btn.disabled = false; btn.textContent = '登录'; }
+}
+
+function doLogout() {
+  session = { token:'', name:'', employeeId:'' };
+  sessionStorage.removeItem('adminSession');
+  document.getElementById('loginWrap').style.display = 'flex';
+  document.getElementById('appWrap').style.display   = 'none';
+  document.getElementById('empIdInput').value = '';
+  document.getElementById('passwordInput').value = '';
+  document.getElementById('loginAlert').style.display = 'none';
+}
+
+function loadAllData() { loadStudents(); loadQuestions(); loadExport(); loadAdmins(); }
+
+// ── 修改密码（首次登录）──
+function submitFirstChangePassword() {
+  const oldPw = document.getElementById('firstOldPw').value;
+  const newPw = document.getElementById('firstNewPw').value;
+  const cfPw  = document.getElementById('firstConfirmPw').value;
+  if (newPw !== cfPw) { showEl('firstPwAlert', '两次密码不一致', 'error'); return; }
+  changePassword('firstPwAlert', oldPw, newPw, () => {
+    closeModal('firstLoginModal');
+    loadAllData();
+  });
+}
+
+// ── 修改密码（一般）──
+function openChangePwModal() {
+  ['oldPw','newPw','confirmPw'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('changePwAlert').innerHTML = '';
+  document.getElementById('changePwModal').classList.add('open');
+}
+
+function submitChangePassword() {
+  const oldPw = document.getElementById('oldPw').value;
+  const newPw = document.getElementById('newPw').value;
+  const cfPw  = document.getElementById('confirmPw').value;
+  if (newPw !== cfPw) { showEl('changePwAlert', '两次密码不一致', 'error'); return; }
+  changePassword('changePwAlert', oldPw, newPw, () => {
+    closeModal('changePwModal');
+    alert('密码修改成功！');
+  });
+}
+
+async function changePassword(alertId, oldPw, newPw, onSuccess) {
+  if (!newPw || newPw.length < 6) { showEl(alertId, '新密码至少 6 个字符', 'error'); return; }
+  try {
+    const res = await api('POST', {
+      action:'changePassword', token: session.token,
+      oldPassword: oldPw, newPassword: newPw
+    });
+    if (res.success) onSuccess();
+    else showEl(alertId, res.error || '修改失败', 'error');
+  } catch { showEl(alertId, '连线失败', 'error'); }
+}
+
+// ── Tab ──
+function switchTab(el, name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-' + name).classList.add('active');
+}
+
+// ── Modal ──
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('modal-bg')) e.target.classList.remove('open');
+});
+
+// ════════════════════════════════════════════════
+// ① 批次上传
+// ════════════════════════════════════════════════
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('uploadZone').classList.remove('dragover');
+  if (e.dataTransfer.files[0]) parseFile(e.dataTransfer.files[0]);
+}
+function handleFileSelect(e) { if (e.target.files[0]) parseFile(e.target.files[0]); }
+
+function parseFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  const reader = new FileReader();
+  reader.onload = e => {
+    let rows = [];
+    if (ext === 'csv') {
+      rows = e.target.result.split('\n')
+        .map(l => l.split(',').map(c => c.trim().replace(/^"|"$/g,'')));
+    } else {
+      const wb = XLSX.read(e.target.result, { type:'array' });
+      rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1 });
+    }
+    const start = (rows.length && isNaN(Number(rows[0][0]))) ? 1 : 0;
+    uploadData = rows.slice(start)
+      .filter(r => r[0] && String(r[0]).trim())
+      .map(r => ({
+        studentId: String(r[0]).trim(),
+        name     : String(r[1]||'').trim(),
+        dept     : String(r[2]||'').trim(),
+        score    : Number(r[3]) || 0
+      }));
+    if (!uploadData.length) {
+      showEl('uploadAlert', '无法解析数据，请确认栏位：学号、姓名、系级、分数', 'error'); return;
+    }
+    renderPreview();
+  };
+  ext === 'csv' ? reader.readAsText(file, 'UTF-8') : reader.readAsArrayBuffer(file);
+}
+
+function renderPreview() {
+  document.getElementById('previewCount').textContent = uploadData.length;
+  const rows = uploadData.slice(0,20).map(r =>
+    `<tr><td>${r.studentId}</td><td>${r.name}</td><td>${r.dept}</td><td>${r.score}</td>
+     <td><span class="badge ${r.score<39?'badge-yellow':'badge-green'}">${r.score<39?'需院考':'通过'}</span></td></tr>`
+  ).join('');
+  document.getElementById('previewTable').innerHTML = `
+    <table><thead><tr><th>学号</th><th>姓名</th><th>系级</th><th>分数</th><th>状态</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    ${uploadData.length>20?'<p style="font-size:.82rem;color:var(--gray-500);margin-top:8px">仅显示前 20 笔</p>':''}`;
+  document.getElementById('previewCard').style.display = '';
+  document.getElementById('uploadAlert').innerHTML = '';
+}
+
+function cancelPreview() {
+  document.getElementById('previewCard').style.display = 'none';
+  uploadData = [];
+  document.getElementById('fileInput').value = '';
+}
+
+async function confirmUpload() {
+  if (!uploadData.length) return;
+  const btn = document.getElementById('confirmUploadBtn');
+  btn.disabled = true; btn.textContent = '上传中…';
+  try {
+    const res = await api('POST', { action:'uploadScores', token: session.token, scores: uploadData });
+    if (res.success) {
+      showEl('uploadAlert', `上传完成！更新 ${res.updated} 笔，新增 ${res.added} 笔`, 'success');
+      cancelPreview(); loadStudents();
+    } else showEl('uploadAlert', res.error||'上传失败', 'error');
+  } catch { showEl('uploadAlert', '连线失败', 'error'); }
+  finally { btn.disabled = false; btn.textContent = '确认上传'; }
+}
+
+// ════════════════════════════════════════════════
+// ② 学生总览
+// ════════════════════════════════════════════════
+async function loadStudents() {
+  try {
+    const res = await api('GET', { action:'getStudents', token: session.token });
+    if (res.success) { allStudents = res.students; renderStudentsTable(allStudents); }
+    else showEl('studentsAlert', res.error, 'error');
+  } catch { showEl('studentsAlert', '加载失败', 'error'); }
+}
+
+function filterStudents() {
+  const kw = document.getElementById('studentSearch').value.toLowerCase();
+  renderStudentsTable(kw
+    ? allStudents.filter(s =>
+        String(s.studentId).toLowerCase().includes(kw) ||
+        String(s.name).toLowerCase().includes(kw) ||
+        String(s.dept).toLowerCase().includes(kw))
+    : allStudents);
+}
+
+function renderStudentsTable(students) {
+  if (!students.length) {
+    document.getElementById('studentsTable').innerHTML = '<p style="color:var(--gray-500);font-size:.88rem">无数据</p>'; return;
+  }
+  const rows = students.map(s => {
+    const need = s.needExam===true||s.needExam==='TRUE';
+    const pass = s.passed===true||s.passed==='TRUE';
+    const badge = !need
+      ? '<span class="badge badge-blue">大学测验通过</span>'
+      : pass ? '<span class="badge badge-green">院考通过</span>'
+             : '<span class="badge badge-yellow">待考</span>';
+    const d = s.lastExamDate ? new Date(s.lastExamDate).toLocaleDateString('zh-CN') : '—';
+    return `<tr><td>${s.studentId}</td><td>${s.name}</td><td>${s.dept}</td>
+      <td>${s.uniScore!==''&&s.uniScore!=null?s.uniScore:'—'}</td>
+      <td>${badge}</td>
+      <td>${s.bestScore!==''&&s.bestScore!=null?s.bestScore:'—'}</td>
+      <td>${d}</td></tr>`;
+  }).join('');
+  document.getElementById('studentsTable').innerHTML = `
+    <table><thead><tr><th>学号</th><th>姓名</th><th>系级</th><th>大学测验分数</th>
+    <th>状态</th><th>院考最高分</th><th>最后考试日期</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+// ════════════════════════════════════════════════
+// ③ 题库管理
+// ════════════════════════════════════════════════
+async function loadQuestions() {
+  try {
+    const res = await api('GET', { action:'getQuestionBank', token: session.token });
+    if (res.success) { allQuestions = res.questions; renderQuestionsTable(); }
+    else showEl('questionsAlert', res.error, 'error');
+  } catch { showEl('questionsAlert', '加载失败', 'error'); }
+}
+
+function renderQuestionsTable() {
+  document.getElementById('questionCount').textContent = `共 ${allQuestions.length} 题`;
+  if (!allQuestions.length) {
+    document.getElementById('questionsTable').innerHTML = '<p style="color:var(--gray-500);font-size:.88rem">题库为空</p>'; return;
+  }
+  const rows = allQuestions.map(q =>
+    `<tr>
+      <td style="width:50px">${q.questionId}</td>
+      <td style="max-width:300px;word-break:break-all">${q.text}</td>
+      <td><span class="badge badge-gray">A</span> ${q.optionA}</td>
+      <td><span class="badge badge-blue">${q.answer}</span></td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick='openQuestionModal(${JSON.stringify(q)})'>编辑</button>
+        <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="deleteQuestion(${q.questionId})">删除</button>
+      </td>
+    </tr>`).join('');
+  document.getElementById('questionsTable').innerHTML = `
+    <table><thead><tr><th>题号</th><th>题目</th><th>选项</th><th>答案</th><th>操作</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+function openQuestionModal(q) {
+  document.getElementById('questionModalTitle').textContent = q ? '编辑题目' : '新增题目';
+  document.getElementById('editQuestionId').value = q ? q.questionId : '';
+  document.getElementById('qText').value   = q?.text    || '';
+  document.getElementById('qA').value      = q?.optionA || '';
+  document.getElementById('qB').value      = q?.optionB || '';
+  document.getElementById('qC').value      = q?.optionC || '';
+  document.getElementById('qD').value      = q?.optionD || '';
+  document.getElementById('qAnswer').value = q?.answer  || 'A';
+  document.getElementById('qModalAlert').innerHTML = '';
+  document.getElementById('questionModal').classList.add('open');
+}
+
+async function saveQuestion() {
+  const id = document.getElementById('editQuestionId').value;
+  const q  = {
+    questionId: id,
+    text   : document.getElementById('qText').value.trim(),
+    optionA: document.getElementById('qA').value.trim(),
+    optionB: document.getElementById('qB').value.trim(),
+    optionC: document.getElementById('qC').value.trim(),
+    optionD: document.getElementById('qD').value.trim(),
+    answer : document.getElementById('qAnswer').value
+  };
+  if (!q.text||!q.optionA||!q.optionB||!q.optionC||!q.optionD) {
+    showEl('qModalAlert','请填写所有栏位','error'); return;
+  }
+  try {
+    const res = await api('POST', { action: id ? 'updateQuestion':'addQuestion', token: session.token, question: q });
+    if (res.success) { closeModal('questionModal'); loadQuestions(); }
+    else showEl('qModalAlert', res.error||'保存失败', 'error');
+  } catch { showEl('qModalAlert','连线失败','error'); }
+}
+
+async function deleteQuestion(questionId) {
+  if (!confirm(`确定删除题号 ${questionId}？`)) return;
+  try {
+    const res = await api('POST', { action:'deleteQuestion', token: session.token, questionId });
+    if (res.success) loadQuestions();
+    else showEl('questionsAlert', res.error||'删除失败', 'error');
+  } catch { showEl('questionsAlert','连线失败','error'); }
+}
+
+// ════════════════════════════════════════════════
+// ④ 导出报表
+// ════════════════════════════════════════════════
+async function loadExport() {
+  try {
+    const res = await api('GET', { action:'exportReport', token: session.token });
+    if (!res.success) return;
+    exportCache = res;
+    const s = res.summary;
+    document.getElementById('statsGrid').innerHTML = `
+      <div class="stat-card"><div class="stat-num">${s.total}</div><div class="stat-label">学生总数</div></div>
+      <div class="stat-card"><div class="stat-num">${s.needExam}</div><div class="stat-label">需院考人数</div></div>
+      <div class="stat-card"><div class="stat-num">${s.passed}</div><div class="stat-label">院考通过人数</div></div>
+      <div class="stat-card"><div class="stat-num">${s.examCount}</div><div class="stat-label">考试次数</div></div>`;
+  } catch {}
+}
+
+function exportStudentsXLSX() {
+  if (!exportCache) return;
+  downloadXLSX(exportCache.students.map(s => ({
+    '学号':s['学号'],'姓名':s['姓名'],'系级':s['系级'],
+    '大学测验分数':s['大学测验分数'],
+    '需院考':s['需院考']?'是':'否',
+    '院考最高分':s['院考最高分'],
+    '院考通过':s['院考通过']?'是':'否',
+    '最后考试日期':s['最后考试日期']
+  })), '学生清单');
+}
+
+function exportRecordsXLSX() {
+  if (!exportCache) return;
+  downloadXLSX(exportCache.records.map(r => ({
+    '考试ID':r['考试ID'],'学号':r['学号'],'考试时间':r['考试时间'],
+    '得分':r['得分'],'通过':r['通过']?'是':'否','作答时间(秒)':r['作答时间(秒)']
+  })), '考试记录');
+}
+
+function downloadXLSX(data, filename) {
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, filename);
+  XLSX.writeFile(wb, `${filename}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+// ════════════════════════════════════════════════
+// ⑤ 账号管理
+// ════════════════════════════════════════════════
+async function loadAdmins() {
+  try {
+    const res = await api('GET', { action:'getAdmins', token: session.token });
+    if (!res.success) { showEl('accountsAlert', res.error, 'error'); return; }
+    renderAdminsTable(res.admins);
+  } catch { showEl('accountsAlert','加载失败','error'); }
+}
+
+function renderAdminsTable(admins) {
+  if (!admins.length) {
+    document.getElementById('adminsTable').innerHTML = '<p style="color:var(--gray-500);font-size:.88rem">无账号</p>'; return;
+  }
+  const rows = admins.map(a => {
+    const isSelf = a.employeeId === session.employeeId;
+    const lastLogin = a.lastLogin ? new Date(a.lastLogin).toLocaleString('zh-CN') : '从未登录';
+    return `<tr>
+      <td>${a.employeeId} ${isSelf ? '<span class="badge badge-blue">本人</span>':''}</td>
+      <td>${a.name}</td>
+      <td>${a.mustChange
+        ? '<span class="badge badge-yellow">需修改密码</span>'
+        : '<span class="badge badge-green">正常</span>'}</td>
+      <td>${lastLogin}</td>
+      <td>${!isSelf
+        ? `<button class="btn btn-warning btn-sm" onclick="resetPassword('${a.employeeId}','${a.name}')">重设密码</button>`
+        : '—'}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('adminsTable').innerHTML = `
+    <table><thead><tr><th>员工号</th><th>姓名</th><th>状态</th><th>最后登录</th><th>操作</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+function openAddAdminModal() {
+  document.getElementById('newEmpId').value = '';
+  document.getElementById('newAdminName').value = '';
+  document.getElementById('addAdminAlert').innerHTML = '';
+  document.getElementById('addAdminModal').classList.add('open');
+}
+
+async function submitAddAdmin() {
+  const empId = document.getElementById('newEmpId').value.trim();
+  const name  = document.getElementById('newAdminName').value.trim();
+  if (!empId||!name) { showEl('addAdminAlert','员工号与姓名为必填','error'); return; }
+  try {
+    const res = await api('POST', { action:'addAdmin', token: session.token, admin:{ employeeId:empId, name } });
+    if (res.success) { closeModal('addAdminModal'); loadAdmins(); }
+    else showEl('addAdminAlert', res.error||'建立失败','error');
+  } catch { showEl('addAdminAlert','连线失败','error'); }
+}
+
+async function resetPassword(empId, name) {
+  if (!confirm(`确定重设「${name}（${empId}）」的密码为预设密码？`)) return;
+  try {
+    const res = await api('POST', { action:'resetAdminPassword', token: session.token, targetEmployeeId: empId });
+    if (res.success) { showEl('accountsAlert',`已重设 ${name} 的密码`,'success'); loadAdmins(); }
+    else showEl('accountsAlert', res.error||'重设失败','error');
+  } catch { showEl('accountsAlert','连线失败','error'); }
+}
+
+// ── 工具 ──
+async function api(method, params) {
+  if (method === 'GET') {
+    const r = await fetch(`${GAS_URL}?${new URLSearchParams(params)}`);
+    return r.json();
+  }
+  const r = await fetch(GAS_URL, { method:'POST', body: JSON.stringify(params) });
+  return r.json();
+}
+
+function showEl(id, msg, type) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+  if (type === 'success') setTimeout(() => el.innerHTML = '', 4000);
+}
+
+// 恢复 session（若同一页刷新）
+const saved = sessionStorage.getItem('adminSession');
+if (saved) {
+  session = JSON.parse(saved);
+  document.getElementById('loginWrap').style.display = 'none';
+  document.getElementById('appWrap').style.display   = 'flex';
+  document.getElementById('topbarName').textContent  = `${session.name}（${session.employeeId}）`;
+  loadAllData();
+}
+</script>
+</body>
+</html>
