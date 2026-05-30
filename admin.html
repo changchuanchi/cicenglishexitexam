@@ -610,12 +610,14 @@ function renderStudentsTable(students) {
     document.getElementById('studentsTable').innerHTML = '<p style="color:var(--gray-500);font-size:.88rem">无数据</p>'; return;
   }
   const rows = students.map(s => {
-    const need = s.needExam===true||s.needExam==='TRUE';
-    const pass = s.passed===true||s.passed==='TRUE';
-    const badge = !need
-      ? '<span class="badge badge-blue">大学测验通过</span>'
-      : pass ? '<span class="badge badge-green">院考通过</span>'
-             : '<span class="badge badge-yellow">待考</span>';
+    const need        = s.needExam===true||s.needExam==='TRUE';
+    const pass        = s.passed===true||s.passed==='TRUE';
+    const hasUniScore = s.uniScore!==''&&s.uniScore!=null&&s.uniScore!==undefined;
+    const badge =
+      pass                  ? '<span class="badge badge-green">院考通过</span>'
+      : (!need && hasUniScore) ? '<span class="badge badge-blue">大学测验通过</span>'
+      : need                ? '<span class="badge badge-yellow">待院考</span>'
+      :                       '<span class="badge badge-gray">未上传成绩</span>';
     const d = s.lastExamDate ? new Date(s.lastExamDate).toLocaleDateString('zh-CN') : '—';
     return `<tr><td>${s.studentId}</td><td>${s.name}</td><td>${s.dept}</td>
       <td>${s.uniScore!==''&&s.uniScore!=null?s.uniScore:'—'}</td>
