@@ -190,6 +190,15 @@
   <p>College English Graduation Examination</p>
 </div>
 
+<div style="position:fixed;bottom:16px;right:16px;z-index:50">
+  <a href="admin.html"
+     style="font-size:.78rem;color:var(--gray-600);text-decoration:none;
+            background:#fff;border:1px solid var(--gray-200);border-radius:6px;
+            padding:5px 12px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+    管理员入口
+  </a>
+</div>
+
 <!-- ①登录 -->
 <div class="card screen active" id="loginScreen">
   <h2>学生考试登记</h2>
@@ -201,6 +210,10 @@
   <div class="form-group">
     <label>姓名</label>
     <input type="text" id="studentNameInput" placeholder="请输入姓名" autocomplete="off">
+  </div>
+  <div class="form-group">
+    <label>科系</label>
+    <select id="studentDeptInput"></select>
   </div>
   <button class="btn btn-primary" id="loginBtn" onclick="handleLogin()">开始考试</button>
   <p style="font-size:.8rem;color:var(--gray-600);margin-top:10px;text-align:center">
@@ -251,7 +264,22 @@
 <script>
 // ── 设置 ──────────────────────────────────────
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbymKvDkRyWPAMgm9YOh9h54IyRbncWPSOihQIp9WFVX7WknNLit7x9WMt3wlaORkEtycw/exec';
+
+// ── 科系清单（如需新增科系，在此列表加入即可）──
+const DEPARTMENTS = [
+  '国际商务',
+  '金融会计',
+  '创意设计',
+  '旅游管理',
+];
 // ─────────────────────────────────────────────
+
+// 初始化科系下拉选单
+(function initDeptSelect() {
+  const sel = document.getElementById('studentDeptInput');
+  sel.innerHTML = '<option value="">-- 请选择科系 --</option>' +
+    DEPARTMENTS.map(d => `<option value="${d}">${d}</option>`).join('');
+})();
 
 let currentStudent = null;
 let questions      = [];
@@ -271,8 +299,10 @@ function showScreen(id) {
 async function handleLogin() {
   const id   = document.getElementById('studentIdInput').value.trim();
   const name = document.getElementById('studentNameInput').value.trim();
+  const dept = document.getElementById('studentDeptInput').value;
   if (!id)   return showError('loginError', '请输入学号');
   if (!name) return showError('loginError', '请输入姓名');
+  if (!dept) return showError('loginError', '请选择科系');
 
   document.getElementById('loginError').style.display = 'none';
   const btn = document.getElementById('loginBtn');
@@ -282,7 +312,7 @@ async function handleLogin() {
     const res = await api('GET', { action: 'getQuestions' });
     if (!res.success) { showError('loginError', res.error || '无法获取题目'); return; }
 
-    currentStudent = { studentId: id, name };
+    currentStudent = { studentId: id, name, dept };
     questions   = res.questions;
     answers     = {};
     currentIdx  = 0;
@@ -384,6 +414,7 @@ async function submitExamData() {
       action    : 'submitExam',
       studentId : currentStudent.studentId,
       name      : currentStudent.name,
+      dept      : currentStudent.dept,
       answers,
       timeTaken
     });
@@ -410,6 +441,7 @@ function logout() {
   clearInterval(timerInterval);
   document.getElementById('studentIdInput').value = '';
   document.getElementById('studentNameInput').value = '';
+  document.getElementById('studentDeptInput').value = '';
   document.getElementById('loginError').style.display = 'none';
   showScreen('loginScreen');
 }
