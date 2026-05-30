@@ -407,7 +407,7 @@
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbymKvDkRyWPAMgm9YOh9h54IyRbncWPSOihQIp9WFVX7WknNLit7x9WMt3wlaORkEtycw/exec';
 // ────────────────────────────────────────────────
 
-let session = { token: '', name: '', employeeId: '' };
+let session = { token: '', name: '', employeeId: '', role: '' };
 let allStudents  = [];
 let allQuestions = [];
 let uploadData   = [];
@@ -426,12 +426,13 @@ async function doLogin() {
     const res = await api('POST', { action:'adminLogin', employeeId: empId, password: pw });
     if (!res.success) { showEl('loginAlert', res.error || '登录失败', 'error'); return; }
 
-    session = { token: res.token, name: res.name, employeeId: res.employeeId };
+    session = { token: res.token, name: res.name, employeeId: res.employeeId, role: res.role };
     sessionStorage.setItem('adminSession', JSON.stringify(session));
 
     document.getElementById('loginWrap').style.display = 'none';
     document.getElementById('appWrap').style.display   = 'flex';
     document.getElementById('topbarName').textContent  = `${res.name}（${res.employeeId}）`;
+    applyRolePermissions();
 
     if (res.mustChange) {
       document.getElementById('firstLoginModal').classList.add('open');
@@ -826,6 +827,28 @@ function showEl(id, msg, type) {
   if (type === 'success') setTimeout(() => el.innerHTML = '', 4000);
 }
 
+// ── 角色权限控制 ──
+function applyRolePermissions() {
+  if (session.role === 'admin') return; // admin 全权限，不需要限制
+
+  // viewer：隐藏写入功能分页
+  ['upload', 'questions', 'accounts'].forEach(tab => {
+    const el = document.querySelector(`[data-tab="${tab}"]`);
+    if (el) el.style.display = 'none';
+  });
+
+  // 切换到学生总览（第一个可见分页）
+  const firstTab = document.querySelector('.tab:not([style*="display: none"])');
+  if (firstTab) {
+    const tabName = firstTab.getAttribute('data-tab');
+    switchTab(firstTab, tabName);
+  }
+
+  // 顶部显示角色标记
+  const nameEl = document.getElementById('topbarName');
+  if (nameEl) nameEl.textContent += '（检视者）';
+}
+
 // 恢复 session（若同一页刷新）
 const saved = sessionStorage.getItem('adminSession');
 if (saved) {
@@ -833,6 +856,7 @@ if (saved) {
   document.getElementById('loginWrap').style.display = 'none';
   document.getElementById('appWrap').style.display   = 'flex';
   document.getElementById('topbarName').textContent  = `${session.name}（${session.employeeId}）`;
+  applyRolePermissions();
   loadAllData();
 }
 </script>
