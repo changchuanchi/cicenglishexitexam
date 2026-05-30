@@ -744,7 +744,8 @@ function showEl(id, msg, type) {
   const el = document.getElementById(id);
   if (!el) return;
   el.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
-  if (type === 'success') setTimeout(() => el.innerHTML = '', 4000);
+  el.style.display = 'block';
+  if (type === 'success') setTimeout(() => { el.innerHTML = ''; el.style.display = 'none'; }, 4000);
 }
 
 // ── 角色权限控制 ──
