@@ -190,9 +190,9 @@
         onkeydown="if(event.key==='Enter')doLogin()">
     </div>
     <button class="btn btn-primary" style="width:100%" id="loginBtn" onclick="doLogin()">登录</button>
-  </div>
-  <div style="margin-top:20px;text-align:center">
-    <a href="index.html" style="font-size:.9rem;color:#1d4ed8;text-decoration:underline;font-weight:600">
+    <hr style="border:none;border-top:1px solid var(--gray-200);margin:20px 0">
+    <a href="index.html" style="display:block;text-align:center;font-size:.88rem;
+       color:var(--primary);text-decoration:none;font-weight:500">
       ← 返回博仁大学中文国际学院英文毕业考试系统
     </a>
   </div>
@@ -251,7 +251,6 @@
 
     <!-- ④ 导出报表 -->
     <div class="panel" id="panel-export">
-      <div id="statsGrid" class="stats-grid"></div>
       <div class="card">
         <div class="card-title">导出数据</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -634,11 +633,6 @@ async function loadExport() {
     if (!res.success) return;
     exportCache = res;
     const s = res.summary;
-    document.getElementById('statsGrid').innerHTML = `
-      <div class="stat-card"><div class="stat-num">${s.total}</div><div class="stat-label">学生总数</div></div>
-      <div class="stat-card"><div class="stat-num">${s.needExam}</div><div class="stat-label">待院考人数</div></div>
-      <div class="stat-card"><div class="stat-num">${s.passed}</div><div class="stat-label">院考通过人数</div></div>
-      <div class="stat-card"><div class="stat-num">${s.examCount}</div><div class="stat-label">考试次数</div></div>`;
   } catch {}
 }
 
