@@ -215,8 +215,7 @@
   </div>
 
   <div class="tabs">
-    <div class="tab active" data-tab="upload"    onclick="switchTab(this,'upload')">批次上传成绩</div>
-    <div class="tab"        data-tab="students"  onclick="switchTab(this,'students')">学生总览</div>
+    <div class="tab active" data-tab="students"  onclick="switchTab(this,'students')">学生总览</div>
     <div class="tab"        data-tab="questions" onclick="switchTab(this,'questions')">题库管理</div>
     <div class="tab"        data-tab="export"    onclick="switchTab(this,'export')">导出报表</div>
     <div class="tab"        data-tab="accounts"  onclick="switchTab(this,'accounts')">账号管理</div>
@@ -224,34 +223,8 @@
 
   <div class="content">
 
-    <!-- ① 批次上传 -->
-    <div class="panel active" id="panel-upload">
-      <div class="card">
-        <div class="card-title">批次上传大学电脑测验成绩</div>
-        <div id="uploadAlert"></div>
-        <div class="upload-zone" id="uploadZone"
-          onclick="document.getElementById('fileInput').click()"
-          ondragover="event.preventDefault();this.classList.add('dragover')"
-          ondragleave="this.classList.remove('dragover')"
-          ondrop="handleDrop(event)">
-          <div class="upload-icon">📁</div>
-          <div>点击或拖曳上传 <strong>CSV / XLSX</strong> 文件</div>
-          <div class="upload-hint">支持 DPU-TEP 报表（自动识别）或标准格式：学号、姓名、专业、分数</div>
-        </div>
-        <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" onchange="handleFileSelect(event)">
-      </div>
-      <div class="card" id="previewCard" style="display:none">
-        <div class="card-title">数据预览（共 <span id="previewCount">0</span> 笔）</div>
-        <div class="table-wrap" id="previewTable"></div>
-        <div style="margin-top:16px;display:flex;gap:10px">
-          <button class="btn btn-success" id="confirmUploadBtn" onclick="confirmUpload()">确认上传</button>
-          <button class="btn btn-outline" onclick="cancelPreview()">取消</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ② 学生总览 -->
-    <div class="panel" id="panel-students">
+    <!-- ① 学生总览 -->
+    <div class="panel active" id="panel-students">
       <div class="card">
         <div class="card-title">学生考试状态总览</div>
         <div class="search-bar">
@@ -421,7 +394,6 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbymKvDkRyWPAMgm9YOh9h54
 let session = { token: '', name: '', employeeId: '', role: '' };
 let allStudents  = [];
 let allQuestions = [];
-let uploadData   = [];
 let exportCache  = null;
 
 // ── 登录 ──
@@ -522,100 +494,6 @@ document.addEventListener('click', e => {
   if (e.target.classList.contains('modal-bg')) e.target.classList.remove('open');
 });
 
-// ════════════════════════════════════════════════
-// ① 批次上传
-// ════════════════════════════════════════════════
-function handleDrop(e) {
-  e.preventDefault();
-  document.getElementById('uploadZone').classList.remove('dragover');
-  if (e.dataTransfer.files[0]) parseFile(e.dataTransfer.files[0]);
-}
-function handleFileSelect(e) { if (e.target.files[0]) parseFile(e.target.files[0]); }
-
-function parseFile(file) {
-  const ext = file.name.split('.').pop().toLowerCase();
-  const reader = new FileReader();
-  reader.onload = e => {
-    let rows = [];
-    if (ext === 'csv') {
-      rows = e.target.result.split('\n')
-        .map(l => l.split(',').map(c => c.trim().replace(/^"|"$/g,'')));
-    } else {
-      const wb = XLSX.read(e.target.result, { type:'array' });
-      rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1 });
-    }
-
-    // 自动检测 DPU-TEP 格式（寻找含 'Student ID' 的标题行）
-    let dpuStart = -1;
-    for (let i = 0; i < Math.min(rows.length, 10); i++) {
-      if (String(rows[i][1]).trim() === 'Student ID') { dpuStart = i + 1; break; }
-    }
-
-    if (dpuStart >= 0) {
-      // DPU-TEP 格式：No. | Student ID | Name | College | Date | L | R | W | Total(120) | Level | CEFR
-      uploadData = rows.slice(dpuStart)
-        .filter(r => r[1] && !isNaN(Number(r[1])) && r[8] !== '-' && String(r[8]).trim() !== '')
-        .map(r => ({
-          studentId: String(Math.floor(Number(r[1]))).trim(),
-          name     : String(r[2]||'').replace(/^(Mr\.|Ms\.|Mrs\.)\s*/i, '').trim(),
-          dept     : '',
-          score    : Number(r[8]) || 0
-        }));
-      showEl('uploadAlert', `已识别为 DPU-TEP 格式，共解析 ${uploadData.length} 笔（缺考已略过）`, 'info');
-    } else {
-      // 标准格式：学号、姓名、专业、分数
-      const start = (rows.length && isNaN(Number(rows[0][0]))) ? 1 : 0;
-      uploadData = rows.slice(start)
-        .filter(r => r[0] && String(r[0]).trim())
-        .map(r => ({
-          studentId: String(r[0]).trim(),
-          name     : String(r[1]||'').trim(),
-          dept     : String(r[2]||'').trim(),
-          score    : Number(r[3]) || 0
-        }));
-    }
-
-    if (!uploadData.length) {
-      showEl('uploadAlert', '无法解析数据，请确认文件格式', 'error'); return;
-    }
-    renderPreview();
-  };
-  ext === 'csv' ? reader.readAsText(file, 'UTF-8') : reader.readAsArrayBuffer(file);
-}
-
-function renderPreview() {
-  document.getElementById('previewCount').textContent = uploadData.length;
-  const rows = uploadData.slice(0,20).map(r =>
-    `<tr><td>${r.studentId}</td><td>${r.name}</td><td>${r.dept}</td><td>${r.score}</td>
-     <td><span class="badge ${r.score<39?'badge-yellow':'badge-green'}">${r.score<39?'待院考':'通过'}</span></td></tr>`
-  ).join('');
-  document.getElementById('previewTable').innerHTML = `
-    <table><thead><tr><th>学号</th><th>姓名</th><th>专业</th><th>分数</th><th>状态</th></tr></thead>
-    <tbody>${rows}</tbody></table>
-    ${uploadData.length>20?'<p style="font-size:.82rem;color:var(--gray-500);margin-top:8px">仅显示前 20 笔</p>':''}`;
-  document.getElementById('previewCard').style.display = '';
-  document.getElementById('uploadAlert').innerHTML = '';
-}
-
-function cancelPreview() {
-  document.getElementById('previewCard').style.display = 'none';
-  uploadData = [];
-  document.getElementById('fileInput').value = '';
-}
-
-async function confirmUpload() {
-  if (!uploadData.length) return;
-  const btn = document.getElementById('confirmUploadBtn');
-  btn.disabled = true; btn.textContent = '上传中…';
-  try {
-    const res = await api('POST', { action:'uploadScores', token: session.token, scores: uploadData });
-    if (res.success) {
-      showEl('uploadAlert', `上传完成！更新 ${res.updated} 笔，新增 ${res.added} 笔`, 'success');
-      cancelPreview(); loadStudents();
-    } else showEl('uploadAlert', res.error||'上传失败', 'error');
-  } catch { showEl('uploadAlert', '连线失败', 'error'); }
-  finally { btn.disabled = false; btn.textContent = '确认上传'; }
-}
 
 // ════════════════════════════════════════════════
 // ② 学生总览
@@ -880,7 +758,7 @@ function applyRolePermissions() {
   if (session.role !== 'viewer') return; // 只有明确为 viewer 才限制，undefined/admin 均为全权限
 
   // viewer：隐藏写入功能分页
-  ['upload', 'questions', 'accounts'].forEach(tab => {
+  ['questions', 'accounts'].forEach(tab => {
     const el = document.querySelector(`[data-tab="${tab}"]`);
     if (el) el.style.display = 'none';
   });
