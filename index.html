@@ -260,21 +260,25 @@
 // ── 设置 ──────────────────────────────────────
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbymKvDkRyWPAMgm9YOh9h54IyRbncWPSOihQIp9WFVX7WknNLit7x9WMt3wlaORkEtycw/exec';
 
-// ── 科系清单（如需新增科系，在此列表加入即可）──
-const DEPARTMENTS = [
-  '国际商务',
-  '金融会计',
-  '创意设计',
-  '旅游管理',
-];
 // ─────────────────────────────────────────────
 
-// 初始化科系下拉选单
-(function initDeptSelect() {
+// 从 Google Sheets 动态载入专业清单
+async function loadDepartments() {
   const sel = document.getElementById('studentDeptInput');
-  sel.innerHTML = '<option value="">-- 请选择科系 --</option>' +
-    DEPARTMENTS.map(d => `<option value="${d}">${d}</option>`).join('');
-})();
+  sel.innerHTML = '<option value="">载入中…</option>';
+  try {
+    const res = await api('GET', { action: 'getDepartments' });
+    if (res.success && res.departments.length) {
+      sel.innerHTML = '<option value="">-- 请选择专业 --</option>' +
+        res.departments.map(d => `<option value="${d}">${d}</option>`).join('');
+    } else {
+      sel.innerHTML = '<option value="">-- 请选择专业 --</option>';
+    }
+  } catch (e) {
+    sel.innerHTML = '<option value="">-- 请选择专业 --</option>';
+  }
+}
+loadDepartments();
 
 let currentStudent = null;
 let questions      = [];
