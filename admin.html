@@ -829,7 +829,7 @@ function showEl(id, msg, type) {
 
 // ── 角色权限控制 ──
 function applyRolePermissions() {
-  if (session.role === 'admin') return; // admin 全权限，不需要限制
+  if (session.role !== 'viewer') return; // 只有明确为 viewer 才限制，undefined/admin 均为全权限
 
   // viewer：隐藏写入功能分页
   ['upload', 'questions', 'accounts'].forEach(tab => {
