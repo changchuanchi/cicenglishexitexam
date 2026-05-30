@@ -192,30 +192,20 @@
 
 <!-- ①登录 -->
 <div class="card screen active" id="loginScreen">
-  <h2>学生登录</h2>
+  <h2>学生考试登记</h2>
   <div id="loginError" class="alert alert-error" style="display:none"></div>
   <div class="form-group">
     <label>学号</label>
     <input type="text" id="studentIdInput" placeholder="请输入学号" autocomplete="off">
   </div>
-  <button class="btn btn-primary" id="loginBtn" onclick="handleLogin()">查询考试资格</button>
-</div>
-
-<!-- ②资格确认 -->
-<div class="card screen" id="statusScreen">
-  <h2>考试资格确认</h2>
-  <div id="studentInfo"></div>
-  <div style="margin-top:20px">
-    <button class="btn btn-primary" id="startExamBtn" onclick="handleStartExam()">开始考试</button>
-    <p style="font-size:.8rem;color:var(--gray-600);margin-top:8px;text-align:center">
-      考试一旦开始，计时即刻启动，共 50 题，时间 60 分钟
-    </p>
+  <div class="form-group">
+    <label>姓名</label>
+    <input type="text" id="studentNameInput" placeholder="请输入姓名" autocomplete="off">
   </div>
-  <div style="margin-top:24px">
-    <h2 style="font-size:1rem;margin-bottom:8px">历次考试记录</h2>
-    <div id="examRecords"></div>
-  </div>
-  <button class="btn btn-outline" style="margin-top:16px;width:100%" onclick="logout()">返回登录</button>
+  <button class="btn btn-primary" id="loginBtn" onclick="handleLogin()">开始考试</button>
+  <p style="font-size:.8rem;color:var(--gray-600);margin-top:10px;text-align:center">
+    考试开始后计时即刻启动，共 50 题，时间 60 分钟
+  </p>
 </div>
 
 <!-- ③考试 -->
@@ -255,12 +245,12 @@
     <div class="result-label" id="resultLabel"></div>
     <div class="result-detail" id="resultDetail"></div>
   </div>
-  <button class="btn btn-outline" style="width:100%;margin-top:16px" onclick="backToStatus()">查看考试记录</button>
+  <button class="btn btn-outline" style="width:100%;margin-top:16px" onclick="logout()">完成</button>
 </div>
 
 <script>
 // ── 设置 ──────────────────────────────────────
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbyXELzeSU83WVj07g56Hm-vqXQu6Tp3tBk-_KhOXrNXtnfKO4A94e4Z9Kco0D6Sc-L-wA/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbymKvDkRyWPAMgm9YOh9h54IyRbncWPSOihQIp9WFVX7WknNLit7x9WMt3wlaORkEtycw/exec';
 // ─────────────────────────────────────────────
 
 let currentStudent = null;
@@ -277,112 +267,42 @@ function showScreen(id) {
   window.scrollTo(0, 0);
 }
 
-// ── 登录 ──
+// ── 登录并直接开始考试 ──
 async function handleLogin() {
-  const id = document.getElementById('studentIdInput').value.trim();
-  if (!id) return showError('loginError', '请输入学号');
+  const id   = document.getElementById('studentIdInput').value.trim();
+  const name = document.getElementById('studentNameInput').value.trim();
+  if (!id)   return showError('loginError', '请输入学号');
+  if (!name) return showError('loginError', '请输入姓名');
 
+  document.getElementById('loginError').style.display = 'none';
   const btn = document.getElementById('loginBtn');
-  btn.disabled = true; btn.textContent = '查询中…';
-
-  try {
-    const res = await api('GET', { action: 'getStudent', studentId: id });
-    if (!res.success) return showError('loginError', res.error || '查无此学号');
-
-    currentStudent = res.student;
-    renderStatus(res.student, res.records);
-    showScreen('statusScreen');
-  } catch (e) {
-    showError('loginError', '连线失败，请稍后再试');
-  } finally {
-    btn.disabled = false; btn.textContent = '查询考试资格';
-  }
-}
-
-document.getElementById('studentIdInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') handleLogin();
-});
-
-function renderStatus(s, records) {
-  const needExam = s.needExam === true || s.needExam === 'TRUE';
-  const passed   = s.passed   === true || s.passed   === 'TRUE';
-
-  document.getElementById('studentInfo').innerHTML = `
-    <div class="info-row"><span class="info-label">学号</span><span class="info-value">${s.studentId}</span></div>
-    <div class="info-row"><span class="info-label">姓名</span><span class="info-value">${s.name}</span></div>
-    <div class="info-row"><span class="info-label">系级</span><span class="info-value">${s.dept}</span></div>
-    <div class="info-row">
-      <span class="info-label">大学电脑测验分数</span>
-      <span class="info-value">${s.uniScore !== '' ? s.uniScore + ' 分' : '—'}</span>
-    </div>
-    <div class="info-row">
-      <span class="info-label">考试资格</span>
-      <span class="info-value">
-        ${needExam
-          ? (passed
-              ? '<span class="badge badge-green">院考通过 ✓</span>'
-              : '<span class="badge badge-yellow">需参加院考</span>')
-          : '<span class="badge badge-green">大学测验通过 ✓</span>'}
-      </span>
-    </div>
-    ${s.bestScore !== '' && s.bestScore !== undefined
-      ? `<div class="info-row"><span class="info-label">院考最高分</span><span class="info-value">${s.bestScore} 分</span></div>`
-      : ''}
-  `;
-
-  const startBtn = document.getElementById('startExamBtn');
-  if (!needExam || passed) {
-    startBtn.disabled = true;
-    startBtn.textContent = needExam ? '院考已通过' : '大学测验已通过，无需院考';
-  } else {
-    startBtn.disabled = false;
-    startBtn.textContent = '开始考试';
-  }
-
-  if (records && records.length) {
-    const rows = records.slice().reverse().map(r => {
-      const p = r.passed === true || r.passed === 'TRUE';
-      const d = r.time ? new Date(r.time).toLocaleDateString('zh-CN') : '—';
-      return `<tr>
-        <td>${d}</td>
-        <td>${r.score} 分</td>
-        <td><span class="badge ${p ? 'badge-green' : 'badge-red'}">${p ? '通过' : '未通过'}</span></td>
-        <td>${r.timeTaken ? Math.floor(r.timeTaken/60)+'分'+((r.timeTaken%60)+'秒') : '—'}</td>
-      </tr>`;
-    }).join('');
-    document.getElementById('examRecords').innerHTML = `
-      <table class="records-table">
-        <thead><tr><th>日期</th><th>成绩</th><th>结果</th><th>作答时间</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>`;
-  } else {
-    document.getElementById('examRecords').innerHTML =
-      '<p style="font-size:.85rem;color:var(--gray-600)">暂无考试记录</p>';
-  }
-}
-
-// ── 开始考试 ──
-async function handleStartExam() {
-  const btn = document.getElementById('startExamBtn');
   btn.disabled = true; btn.textContent = '加载题目中…';
 
   try {
     const res = await api('GET', { action: 'getQuestions' });
-    if (!res.success) { alert(res.error || '无法获取题目'); btn.disabled = false; return; }
+    if (!res.success) { showError('loginError', res.error || '无法获取题目'); return; }
 
-    questions  = res.questions;
-    answers    = {};
-    currentIdx = 0;
+    currentStudent = { studentId: id, name };
+    questions   = res.questions;
+    answers     = {};
+    currentIdx  = 0;
     secondsLeft = 60 * 60;
     renderQuestion();
     startTimer();
     showScreen('examScreen');
   } catch (e) {
-    alert('连线失败，请稍后再试');
+    showError('loginError', '连线失败，请稍后再试');
   } finally {
     btn.disabled = false; btn.textContent = '开始考试';
   }
 }
+
+document.getElementById('studentIdInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('studentNameInput').focus();
+});
+document.getElementById('studentNameInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') handleLogin();
+});
 
 // ── 题目渲染 ──
 function renderQuestion() {
@@ -463,6 +383,7 @@ async function submitExamData() {
     const res = await api('POST', {
       action    : 'submitExam',
       studentId : currentStudent.studentId,
+      name      : currentStudent.name,
       answers,
       timeTaken
     });
@@ -477,15 +398,10 @@ function showResult(res) {
   const circle = document.getElementById('scoreCircle');
   circle.className = 'score-circle ' + (res.passed ? 'pass' : 'fail');
   document.getElementById('scoreNum').textContent = res.score;
-  document.getElementById('resultLabel').textContent = res.passed ? '恭喜，院考通过！' : '本次未通过';
+  document.getElementById('resultLabel').textContent = res.passed ? '恭喜，考试通过！' : '本次未通过';
   document.getElementById('resultDetail').textContent =
-    `答对 ${res.correct} 题 / 共 ${res.total} 题，通过标准 ${50} 分`;
+    `答对 ${res.correct} 题 / 共 ${res.total} 题`;
   showScreen('resultScreen');
-}
-
-function backToStatus() {
-  handleLogin();
-  showScreen('statusScreen');
 }
 
 function logout() {
@@ -493,6 +409,7 @@ function logout() {
   questions = []; answers = {}; currentIdx = 0;
   clearInterval(timerInterval);
   document.getElementById('studentIdInput').value = '';
+  document.getElementById('studentNameInput').value = '';
   document.getElementById('loginError').style.display = 'none';
   showScreen('loginScreen');
 }
