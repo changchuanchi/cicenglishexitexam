@@ -275,7 +275,7 @@
         <div id="accountsAlert"></div>
         <div class="table-wrap" id="adminsTable"><p style="color:var(--gray-500);font-size:.88rem">加载中…</p></div>
         <p style="margin-top:12px;font-size:.82rem;color:var(--gray-500)">
-          预设密码由系统管理员设置于 GAS 程序码中（<code>DEFAULT_PASSWORD</code>）。重设密码后使用者登录时会被强制要求修改。
+          预设密码由系统管理员设置于 GAS 程序码中（<code>DEFAULT_PASSWORD</code>）。重设密码后使用者可用预设密码登录，并自行修改。
         </p>
       </div>
     </div>
@@ -370,7 +370,7 @@
   <div class="modal">
     <h3>新增管理员</h3>
     <div class="alert alert-info" style="margin-bottom:16px">
-      新账号将使用系统预设密码，使用者首次登录时必须修改密码。
+      新账号将使用系统预设密码，使用者可登录后自行修改密码。
     </div>
     <div id="addAdminAlert"></div>
     <div class="form-group">
@@ -419,11 +419,7 @@ async function doLogin() {
     document.getElementById('topbarName').textContent  = `${res.name}（${res.employeeId}）`;
     applyRolePermissions();
 
-    if (res.mustChange) {
-      document.getElementById('firstLoginModal').classList.add('open');
-    } else {
-      loadAllData();
-    }
+    loadAllData();
   } catch { showEl('loginAlert', '连线失败，请稍后再试', 'error'); }
   finally { btn.disabled = false; btn.textContent = '登录'; }
 }
