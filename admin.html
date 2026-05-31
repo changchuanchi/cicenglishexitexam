@@ -228,6 +228,15 @@
 
     <!-- ① 学生总览 -->
     <div class="panel active" id="panel-students">
+      <div class="card" id="examControlCard">
+        <div class="card-title" style="margin-bottom:12px">考试控制</div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span id="examStatusBadge" class="badge badge-gray">检查中…</span>
+          <span style="font-size:.85rem;color:var(--gray-600)">考场密码：<code id="examPasswordDisplay" style="background:var(--gray-100);padding:2px 6px;border-radius:4px">—</code></span>
+          <button class="btn btn-outline btn-sm" onclick="openSetExamPasswordModal()">修改密码</button>
+          <button class="btn btn-sm btn-outline" id="examToggleBtn" onclick="toggleExam()">—</button>
+        </div>
+      </div>
       <div class="card">
         <div class="card-title">学生考试状态总览</div>
         <div class="search-bar">
@@ -388,6 +397,25 @@
   </div>
 </div>
 
+<!-- ── 设置考场密码 Modal ── -->
+<div class="modal-bg" id="setExamPasswordModal">
+  <div class="modal">
+    <h3>设置考场密码</h3>
+    <div class="alert alert-info" style="margin-bottom:14px">
+      留空表示不需要密码，考试开放后学生可直接作答。
+    </div>
+    <div id="setExamPwAlert"></div>
+    <div class="form-group">
+      <label>考场密码（留空则无密码限制）</label>
+      <input type="text" id="examPwField" placeholder="输入密码或留空" autocomplete="off">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('setExamPasswordModal')">取消</button>
+      <button class="btn btn-primary" onclick="submitSetExamPassword()">保存</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── 设置 ────────────────────────────────────────
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbymKvDkRyWPAMgm9YOh9h54IyRbncWPSOihQIp9WFVX7WknNLit7x9WMt3wlaORkEtycw/exec';
@@ -397,6 +425,7 @@ let session = { token: '', name: '', employeeId: '', role: '' };
 let allStudents  = [];
 let allQuestions = [];
 let exportCache  = null;
+let examConfig   = { open: true, password: '' };
 
 // ── 登录 ──
 async function doLogin() {
@@ -434,7 +463,62 @@ function doLogout() {
   document.getElementById('loginAlert').style.display = 'none';
 }
 
-function loadAllData() { loadStudents(); loadQuestions(); loadExport(); loadAdmins(); }
+function loadAllData() { loadStudents(); loadQuestions(); loadExport(); loadAdmins(); loadExamConfig(); }
+
+// ── 考试控制 ──
+async function loadExamConfig() {
+  try {
+    const res = await api('GET', { action: 'getExamConfig', token: session.token });
+    if (res.success) { examConfig = { open: res.open, password: res.password }; renderExamControl(); }
+  } catch {}
+}
+
+function renderExamControl() {
+  const badge     = document.getElementById('examStatusBadge');
+  const btn       = document.getElementById('examToggleBtn');
+  const pwDisplay = document.getElementById('examPasswordDisplay');
+  if (examConfig.open) {
+    badge.className   = 'badge badge-green';
+    badge.textContent = '考试开放中';
+    btn.className     = 'btn btn-sm btn-danger';
+    btn.textContent   = '关闭考试';
+  } else {
+    badge.className   = 'badge badge-red';
+    badge.textContent = '考试已关闭';
+    btn.className     = 'btn btn-sm btn-success';
+    btn.textContent   = '开放考试';
+  }
+  pwDisplay.textContent = examConfig.password || '（无密码）';
+}
+
+async function toggleExam() {
+  const newOpen = !examConfig.open;
+  const msg = newOpen ? '确定开放考试？学生将可开始作答。' : '确定关闭考试？学生将无法开始新的考试。';
+  if (!confirm(msg)) return;
+  try {
+    const res = await api('POST', { action: 'setExamConfig', token: session.token, open: newOpen });
+    if (res.success) { examConfig.open = newOpen; renderExamControl(); }
+    else alert(res.error || '操作失败');
+  } catch { alert('连线失败'); }
+}
+
+function openSetExamPasswordModal() {
+  document.getElementById('examPwField').value = examConfig.password || '';
+  document.getElementById('setExamPwAlert').innerHTML = '';
+  document.getElementById('setExamPasswordModal').classList.add('open');
+}
+
+async function submitSetExamPassword() {
+  const pw = document.getElementById('examPwField').value.trim();
+  try {
+    const res = await api('POST', { action: 'setExamConfig', token: session.token, password: pw });
+    if (res.success) {
+      examConfig.password = pw;
+      renderExamControl();
+      closeModal('setExamPasswordModal');
+    } else showEl('setExamPwAlert', res.error || '保存失败', 'error');
+  } catch { showEl('setExamPwAlert', '连线失败', 'error'); }
+}
 
 // ── 修改密码（首次登录）──
 function submitFirstChangePassword() {
@@ -751,7 +835,8 @@ function showEl(id, msg, type) {
 function applyRolePermissions() {
   if (session.role !== 'viewer') return; // 只有明确为 viewer 才限制，undefined/admin 均为全权限
 
-  // viewer：隐藏写入功能分页
+  // viewer：隐藏写入功能分页与考试控制
+  document.getElementById('examControlCard').style.display = 'none';
   ['questions', 'accounts'].forEach(tab => {
     const el = document.querySelector(`[data-tab="${tab}"]`);
     if (el) el.style.display = 'none';
