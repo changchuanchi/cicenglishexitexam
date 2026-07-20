@@ -104,6 +104,16 @@
   }
   tbody td { padding:9px 12px; border-bottom:1px solid var(--gray-100); }
   tbody tr:hover { background:var(--gray-50); }
+  thead th.sortable { cursor:pointer; user-select:none; }
+  thead th.sortable:hover { background:var(--gray-100); color:var(--primary); }
+  thead th.sorted { color:var(--primary); }
+  thead th .sort-ind { font-size:.72rem; }
+  thead tr.filter-row th { padding:5px 8px; background:#fff; border-bottom:1.5px solid var(--gray-200); }
+  thead tr.filter-row select {
+    width:100%; padding:4px 6px; font-size:.78rem; border:1.5px solid var(--gray-200);
+    border-radius:6px; background:#fff; color:var(--gray-700); cursor:pointer;
+  }
+  thead tr.filter-row select:focus { border-color:var(--primary); outline:none; }
 
   .badge { display:inline-block; padding:2px 9px; border-radius:99px; font-size:.76rem; font-weight:600; }
   .badge-green  { background:#dcfce7; color:var(--success); }
@@ -241,8 +251,10 @@
         <div class="card-title">学生考试状态总览</div>
         <div class="search-bar">
           <input type="text" id="studentSearch" placeholder="搜索学号、姓名或专业" oninput="filterStudents()">
+          <span id="studentCount" style="font-size:.82rem;color:var(--gray-500);white-space:nowrap"></span>
           <button class="btn btn-outline" onclick="loadStudents()">刷新</button>
         </div>
+        <p style="font-size:.78rem;color:var(--gray-500);margin:-4px 0 10px">点栏位标题可排序；「专业」「状态」栏下方可筛选。</p>
         <div id="studentsAlert"></div>
         <div class="table-wrap" id="studentsTable"><p style="color:var(--gray-500);font-size:.88rem">加载中…</p></div>
       </div>
@@ -425,6 +437,8 @@ let session = { token: '', name: '', employeeId: '', role: '' };
 let allStudents  = [];
 let allQuestions = [];
 let exportCache  = null;
+let studentSort   = { key: '', dir: 1 };          // 排序状态：key=栏位、dir=1 升序 / -1 降序
+let studentFilter = { dept: '', status: '' };     // 栏位筛选：专业、状态
 let examConfig   = { open: true, password: '' };
 
 // ── 登录 ──
@@ -580,40 +594,111 @@ document.addEventListener('click', e => {
 // ════════════════════════════════════════════════
 // ② 学生总览
 // ════════════════════════════════════════════════
+// 栏位定义：key＝资料键、label＝表头、type＝排序型别
+const STUDENT_COLS = [
+  { key:'studentId', label:'学号',       type:'text' },
+  { key:'name',      label:'姓名',       type:'text' },
+  { key:'dept',      label:'专业',       type:'text' },
+  { key:'firstScore',label:'入学考分数', type:'num'  },
+  { key:'secondScore',label:'毕业考分数',type:'num'  },
+  { key:'status',    label:'状态',       type:'status' },
+  { key:'bestScore', label:'院考最高分', type:'num'  },
+  { key:'lastExamDate',label:'最后考试日期',type:'date' }
+];
+
+// 由学生资料推算状态类别（与徽章一致），rank 用于排序
+function studentStatus(s) {
+  const need = s.needExam===true||s.needExam==='TRUE';
+  const pass = s.passed===true||s.passed==='TRUE';
+  const hasSecond = s.secondScore!==''&&s.secondScore!=null&&s.secondScore!==undefined;
+  const hasFirst  = s.firstScore!==''&&s.firstScore!=null&&s.firstScore!==undefined;
+  if (pass)              return { key:'passInstitute', label:'院考通过',   cls:'badge-green',  rank:4 };
+  if (hasSecond && !need) return { key:'passGrad',     label:'毕业考通过', cls:'badge-blue',   rank:3 };
+  if (need)              return { key:'needExam',      label:'待院考',     cls:'badge-yellow', rank:0 };
+  if (hasFirst)          return { key:'waitGrad',      label:'待毕业考',   cls:'badge-gray',   rank:1 };
+  return                        { key:'noScore',       label:'未有机考成绩',cls:'badge-gray',   rank:2 };
+}
+
 async function loadStudents() {
   try {
     const res = await api('GET', { action:'getStudents', token: session.token });
-    if (res.success) { allStudents = res.students; renderStudentsTable(allStudents); }
+    if (res.success) { allStudents = res.students; refreshDeptFilter(); renderStudentsTable(); }
     else showEl('studentsAlert', res.error, 'error');
   } catch { showEl('studentsAlert', '加载失败', 'error'); }
 }
 
-function filterStudents() {
-  const kw = document.getElementById('studentSearch').value.toLowerCase();
-  renderStudentsTable(kw
-    ? allStudents.filter(s =>
-        String(s.studentId).toLowerCase().includes(kw) ||
-        String(s.name).toLowerCase().includes(kw) ||
-        String(s.dept).toLowerCase().includes(kw))
-    : allStudents);
+// 关键字搜索（顶部输入框）
+function filterStudents() { renderStudentsTable(); }
+
+// 栏位筛选下拉变动
+function setStudentFilter(which, value) { studentFilter[which] = value; renderStudentsTable(); }
+
+// 点表头排序：同栏切换升/降，换栏则重设为升序
+function sortStudents(key) {
+  if (studentSort.key === key) studentSort.dir = -studentSort.dir;
+  else { studentSort.key = key; studentSort.dir = 1; }
+  renderStudentsTable();
 }
 
-function renderStudentsTable(students) {
+// 依专业清单更新筛选下拉
+function refreshDeptFilter() {
+  const sel = document.getElementById('deptFilter');
+  if (!sel) return;
+  const depts = [...new Set(allStudents.map(s => s.dept).filter(d => d!=='' && d!=null))].sort();
+  const cur = studentFilter.dept;
+  sel.innerHTML = '<option value="">全部专业</option>' +
+    depts.map(d => `<option value="${d}"${d===cur?' selected':''}>${d}</option>`).join('');
+}
+
+// 套用搜索 + 栏位筛选 + 排序，回传要显示的清单
+function getVisibleStudents() {
+  const kw = (document.getElementById('studentSearch')?.value || '').toLowerCase();
+  let list = allStudents.filter(s => {
+    if (kw && !(String(s.studentId).toLowerCase().includes(kw) ||
+                String(s.name).toLowerCase().includes(kw) ||
+                String(s.dept).toLowerCase().includes(kw))) return false;
+    if (studentFilter.dept && s.dept !== studentFilter.dept) return false;
+    if (studentFilter.status && studentStatus(s).key !== studentFilter.status) return false;
+    return true;
+  });
+
+  const { key, dir } = studentSort;
+  if (key) {
+    const col = STUDENT_COLS.find(c => c.key === key);
+    const isEmpty = v => v==='' || v==null || v==='—';
+    list = list.slice().sort((a, b) => {
+      let av, bv;
+      if (col.type === 'status') { av = studentStatus(a).rank; bv = studentStatus(b).rank; }
+      else { av = a[key]; bv = b[key]; }
+      // 空值一律排到最后（不受升降序影响）
+      const ae = col.type!=='status' && isEmpty(av), be = col.type!=='status' && isEmpty(bv);
+      if (ae && be) return 0;
+      if (ae) return 1;
+      if (be) return -1;
+      let cmp;
+      if (col.type === 'num')       cmp = Number(av) - Number(bv);
+      else if (col.type === 'date') cmp = new Date(av).getTime() - new Date(bv).getTime();
+      else if (col.type === 'status') cmp = av - bv;
+      else cmp = String(av).localeCompare(String(bv), 'zh-CN');
+      return cmp * dir;
+    });
+  }
+  return list;
+}
+
+function renderStudentsTable() {
+  const students = getVisibleStudents();
+  const wrap = document.getElementById('studentsTable');
+  const countEl = document.getElementById('studentCount');
+  if (countEl) countEl.textContent = `共 ${students.length} 位`;
+
   if (!students.length) {
-    document.getElementById('studentsTable').innerHTML = '<p style="color:var(--gray-500);font-size:.88rem">无数据</p>'; return;
+    wrap.innerHTML = '<p style="color:var(--gray-500);font-size:.88rem">无符合条件的数据</p>'; return;
   }
   const val = v => (v !== '' && v !== null && v !== undefined) ? v : '—';
   const rows = students.map(s => {
-    const need           = s.needExam===true||s.needExam==='TRUE';
-    const pass           = s.passed===true||s.passed==='TRUE';
-    const hasSecondScore = s.secondScore!==''&&s.secondScore!=null&&s.secondScore!==undefined;
-    const hasFirstScore  = s.firstScore!==''&&s.firstScore!=null&&s.firstScore!==undefined;
-    const badge =
-      pass             ? '<span class="badge badge-green">院考通过</span>'
-      : hasSecondScore && !need ? '<span class="badge badge-blue">毕业考通过</span>'
-      : need           ? '<span class="badge badge-yellow">待院考</span>'
-      : hasFirstScore  ? '<span class="badge badge-gray">待毕业考</span>'
-      :                  '<span class="badge badge-gray">未有机考成绩</span>';
+    const st = studentStatus(s);
+    const badge = `<span class="badge ${st.cls}">${st.label}</span>`;
     const d = s.lastExamDate ? new Date(s.lastExamDate).toLocaleDateString('zh-CN') : '—';
     return `<tr>
       <td>${s.studentId}</td><td>${s.name}</td><td>${val(s.dept)}</td>
@@ -623,13 +708,31 @@ function renderStudentsTable(students) {
       <td>${val(s.bestScore)}</td>
       <td>${d}</td></tr>`;
   }).join('');
-  document.getElementById('studentsTable').innerHTML = `
-    <table><thead><tr>
-      <th>学号</th><th>姓名</th><th>专业</th>
-      <th>入学考分数</th><th>毕业考分数</th>
-      <th>状态</th><th>院考最高分</th><th>最后考试日期</th>
-    </tr></thead>
+
+  const head = STUDENT_COLS.map(c => {
+    const active = studentSort.key === c.key;
+    const arrow = active ? (studentSort.dir === 1 ? ' ▲' : ' ▼') : '';
+    return `<th class="sortable${active?' sorted':''}" onclick="sortStudents('${c.key}')">${c.label}<span class="sort-ind">${arrow}</span></th>`;
+  }).join('');
+
+  const statusOpts = [
+    ['','全部状态'],['needExam','待院考'],['waitGrad','待毕业考'],
+    ['noScore','未有机考成绩'],['passGrad','毕业考通过'],['passInstitute','院考通过']
+  ].map(([v,l]) => `<option value="${v}"${v===studentFilter.status?' selected':''}>${l}</option>`).join('');
+
+  wrap.innerHTML = `
+    <table><thead>
+      <tr>${head}</tr>
+      <tr class="filter-row">
+        <th></th><th></th>
+        <th><select id="deptFilter" onchange="setStudentFilter('dept', this.value)"></select></th>
+        <th></th><th></th>
+        <th><select onchange="setStudentFilter('status', this.value)">${statusOpts}</select></th>
+        <th></th><th></th>
+      </tr>
+    </thead>
     <tbody>${rows}</tbody></table>`;
+  refreshDeptFilter();
 }
 
 // ════════════════════════════════════════════════
