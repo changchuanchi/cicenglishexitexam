@@ -824,11 +824,19 @@ function renderStudentsTable() {
 }
 
 // 量测各层冻结高度：topbar → 返回列 → 分页标签 → 标题／搜索列 → 表头 → 筛选列
-function syncStickyHeadOffset() {
+function syncStickyHeadOffset(retriesLeft) {
   const root = document.documentElement;
-  const topbarH    = document.querySelector('.topbar')?.offsetHeight || 54;
-  const returnBarH = document.getElementById('returnBar')?.offsetHeight || 41;
-  const tabsH      = document.querySelector('.tabs')?.offsetHeight   || 46;
+  const topbarH    = document.querySelector('.topbar')?.offsetHeight;
+  const returnBarH = document.getElementById('returnBar')?.offsetHeight;
+  const tabsH      = document.querySelector('.tabs')?.offsetHeight;
+  // 版面还在退化状态（视窗尚未有尺寸、元素还没算绘）时量到的值不可信。
+  // 但也不能就这样放着不写 —— 没写值会退回 CSS fallback，一样会盖住内容，
+  // 所以排下一帧再试，直到量得到为止。
+  if (!window.innerHeight || !topbarH || !tabsH) {
+    const n = (typeof retriesLeft === 'number') ? retriesLeft : 30;
+    if (n > 0) requestAnimationFrame(function () { syncStickyHeadOffset(n - 1); });
+    return;
+  }
   root.style.setProperty('--topbar-h', topbarH + 'px');
   root.style.setProperty('--returnbar-h', returnBarH + 'px');
   root.style.setProperty('--stick-top', (topbarH + returnBarH + tabsH) + 'px');
@@ -839,15 +847,22 @@ function syncStickyHeadOffset() {
   const firstRow = document.querySelector('#studentsTable thead tr');
   if (firstRow) root.style.setProperty('--sthead-h', firstRow.getBoundingClientRect().height + 'px');
 }
-// 用 ResizeObserver 盯住各固定层：换行、字级变化都会即时重算。
-// 只听 resize 事件会量到旧高度，各层之间就会出现空隙或互相盖住。
+// ResizeObserver 盯各固定层的内容高度变化（换行、字级）；
+// resize 事件盯视窗尺寸变化。两者要并用 —— 只留其一都会有漏网的情境，
+// 量到的旧值会让各层之间露缝或互相盖住。
 (function watchStickyLayers() {
-  if (!window.ResizeObserver) { window.addEventListener('resize', syncStickyHeadOffset); return; }
-  const ro = new ResizeObserver(syncStickyHeadOffset);
-  ['.topbar', '#returnBar', '.tabs', '#studentsToolbar'].forEach(sel => {
-    const el = document.querySelector(sel);
-    if (el) ro.observe(el);
-  });
+  // 参照要留着：ResizeObserver 若无人持有可能被 GC 回收，观察就默默失效了
+  if (window.ResizeObserver) {
+    window.__stickyRO = new ResizeObserver(function () { syncStickyHeadOffset(); });
+    ['.topbar', '#returnBar', '.tabs', '#studentsToolbar'].forEach(sel => {
+      const el = document.querySelector(sel);
+      if (el) window.__stickyRO.observe(el);
+    });
+  }
+  window.addEventListener('resize', syncStickyHeadOffset);
+  window.addEventListener('pageshow', syncStickyHeadOffset);
+  window.addEventListener('load', syncStickyHeadOffset);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(syncStickyHeadOffset);
 })();
 
 // 分页控制列：每页笔数 ＋ 页码 ＋ 显示范围
