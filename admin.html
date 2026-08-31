@@ -115,6 +115,41 @@
   }
   thead tr.filter-row select:focus { border-color:var(--primary); outline:none; }
 
+  /* ── 学生总览：往下滑时冻结表头（黏在 topbar + 分页标签下方）──
+     --stick-top（topbar＋tabs 高度）与 --sthead-h（第一列表头高度）由 JS 量测写入。
+     需 overflow:visible 才能对整页 sticky，故仅在桌面版启用；窄萤幕维持横向卷动。 */
+  @media(min-width:901px){
+    #studentsTable.has-table { overflow:visible; }
+    #studentsTable.has-table thead th { position:sticky; z-index:5; }
+    #studentsTable.has-table thead tr:first-child th {
+      top:var(--stick-top, 100px);
+      /* border-collapse 下 sticky 的 border 会消失，改用 inset 阴影 */
+      border-bottom:none; box-shadow: inset 0 -1.5px 0 var(--gray-200);
+    }
+    #studentsTable.has-table thead tr.filter-row th {
+      top:calc(var(--stick-top, 100px) + var(--sthead-h, 41px)); z-index:4;
+      border-bottom:none; box-shadow: inset 0 -1.5px 0 var(--gray-200);
+    }
+  }
+
+  /* ── 分页 ── */
+  .pager {
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    margin-top:14px; font-size:.83rem; color:var(--gray-600);
+  }
+  .pager .pager-info { color:var(--gray-500); }
+  .pager .pager-spacer { flex:1; }
+  .pager select { width:auto; padding:5px 8px; font-size:.82rem; }
+  .page-btn {
+    min-width:32px; padding:5px 9px; border:1.5px solid var(--gray-200); background:#fff;
+    border-radius:6px; cursor:pointer; font-size:.82rem; font-weight:600; color:var(--gray-700);
+    font-family:inherit;
+  }
+  .page-btn:hover:not(:disabled) { border-color:var(--primary); color:var(--primary); }
+  .page-btn:disabled { color:var(--gray-300); cursor:not-allowed; }
+  .page-btn.active { background:var(--primary); border-color:var(--primary); color:#fff; }
+  .page-ellipsis { color:var(--gray-500); padding:0 2px; }
+
   .badge { display:inline-block; padding:2px 9px; border-radius:99px; font-size:.76rem; font-weight:600; }
   .badge-green  { background:#dcfce7; color:var(--success); }
   .badge-red    { background:#fee2e2; color:var(--danger); }
@@ -257,6 +292,7 @@
         <p style="font-size:.78rem;color:var(--gray-500);margin:-4px 0 10px">点栏位标题可排序；「专业」「状态」栏下方可筛选。</p>
         <div id="studentsAlert"></div>
         <div class="table-wrap" id="studentsTable"><p style="color:var(--gray-500);font-size:.88rem">加载中…</p></div>
+        <div class="pager" id="studentsPager"></div>
       </div>
     </div>
 
@@ -439,6 +475,8 @@ let allQuestions = [];
 let exportCache  = null;
 let studentSort   = { key: '', dir: 1 };          // 排序状态：key=栏位、dir=1 升序 / -1 降序
 let studentFilter = { dept: '', status: '' };     // 栏位筛选：专业、状态
+let studentPage     = 1;                          // 学生总览目前页码（从 1 起）
+let studentPageSize = 50;                         // 每页笔数；0 = 全部
 let examConfig   = { open: true, password: '' };
 
 // ── 登录 ──
@@ -622,23 +660,39 @@ function studentStatus(s) {
 async function loadStudents() {
   try {
     const res = await api('GET', { action:'getStudents', token: session.token });
-    if (res.success) { allStudents = res.students; refreshDeptFilter(); renderStudentsTable(); }
+    if (res.success) { allStudents = res.students; studentPage = 1; refreshDeptFilter(); renderStudentsTable(); }
     else showEl('studentsAlert', res.error, 'error');
   } catch { showEl('studentsAlert', '加载失败', 'error'); }
 }
 
-// 关键字搜索（顶部输入框）
-function filterStudents() { renderStudentsTable(); }
+// 关键字搜索（顶部输入框）—— 条件变动一律回到第 1 页
+function filterStudents() { studentPage = 1; renderStudentsTable(); }
 
 // 栏位筛选下拉变动
-function setStudentFilter(which, value) { studentFilter[which] = value; renderStudentsTable(); }
+function setStudentFilter(which, value) { studentFilter[which] = value; studentPage = 1; renderStudentsTable(); }
 
 // 点表头排序：同栏切换升/降，换栏则重设为升序
 function sortStudents(key) {
   if (studentSort.key === key) studentSort.dir = -studentSort.dir;
   else { studentSort.key = key; studentSort.dir = 1; }
+  studentPage = 1;
   renderStudentsTable();
 }
+
+// 切换页码
+function gotoStudentPage(p) {
+  studentPage = p;
+  renderStudentsTable();
+  // 换页后卷回表格顶端（若目前已卷过头才卷动）
+  const wrap = document.getElementById('studentsTable');
+  if (!wrap) return;
+  const stickTop = parseFloat(getComputedStyle(wrap).getPropertyValue('--stick-top')) || 100;
+  const top = wrap.getBoundingClientRect().top + window.scrollY - stickTop - 12;
+  if (window.scrollY > top) window.scrollTo({ top, behavior:'smooth' });
+}
+
+// 切换每页笔数
+function setStudentPageSize(v) { studentPageSize = Number(v); studentPage = 1; renderStudentsTable(); }
 
 // 依专业清单更新筛选下拉
 function refreshDeptFilter() {
@@ -693,10 +747,23 @@ function renderStudentsTable() {
   if (countEl) countEl.textContent = `共 ${students.length} 位`;
 
   if (!students.length) {
-    wrap.innerHTML = '<p style="color:var(--gray-500);font-size:.88rem">无符合条件的数据</p>'; return;
+    wrap.classList.remove('has-table');
+    wrap.innerHTML = '<p style="color:var(--gray-500);font-size:.88rem">无符合条件的数据</p>';
+    renderStudentsPager(0, 0, 0);
+    return;
   }
+
+  // ── 分页：切出本页要显示的资料 ──
+  const size       = studentPageSize > 0 ? studentPageSize : students.length;
+  const totalPages = Math.max(1, Math.ceil(students.length / size));
+  if (studentPage > totalPages) studentPage = totalPages;
+  if (studentPage < 1) studentPage = 1;
+  const start = (studentPage - 1) * size;
+  const pageStudents = students.slice(start, start + size);
+
+  wrap.classList.add('has-table');
   const val = v => (v !== '' && v !== null && v !== undefined) ? v : '—';
-  const rows = students.map(s => {
+  const rows = pageStudents.map(s => {
     const st = studentStatus(s);
     const badge = `<span class="badge ${st.cls}">${st.label}</span>`;
     const d = s.lastExamDate ? new Date(s.lastExamDate).toLocaleDateString('zh-CN') : '—';
@@ -733,6 +800,58 @@ function renderStudentsTable() {
     </thead>
     <tbody>${rows}</tbody></table>`;
   refreshDeptFilter();
+  syncStickyHeadOffset();
+  renderStudentsPager(students.length, start + 1, start + pageStudents.length);
+}
+
+// 量测冻结位置：topbar＋分页标签的总高度，以及第一列表头高度（筛选列黏在它下方）
+function syncStickyHeadOffset() {
+  const wrap = document.getElementById('studentsTable');
+  if (!wrap) return;
+  const topbarH = document.querySelector('.topbar')?.offsetHeight || 54;
+  const tabsH   = document.querySelector('.tabs')?.offsetHeight   || 46;
+  wrap.style.setProperty('--stick-top', (topbarH + tabsH) + 'px');
+  const firstRow = wrap.querySelector('thead tr');
+  if (firstRow) wrap.style.setProperty('--sthead-h', firstRow.getBoundingClientRect().height + 'px');
+}
+window.addEventListener('resize', syncStickyHeadOffset);
+
+// 分页控制列：每页笔数 ＋ 页码 ＋ 显示范围
+function renderStudentsPager(total, from, to) {
+  const el = document.getElementById('studentsPager');
+  if (!el) return;
+  if (!total) { el.innerHTML = ''; return; }
+
+  const size       = studentPageSize > 0 ? studentPageSize : total;
+  const totalPages = Math.max(1, Math.ceil(total / size));
+
+  const sizeOpts = [25, 50, 100, 0].map(v =>
+    `<option value="${v}"${v === studentPageSize ? ' selected' : ''}>${v === 0 ? '全部' : v + ' 笔'}</option>`).join('');
+
+  let nums = '';
+  if (studentPageSize > 0 && totalPages > 1) {
+    // 页码：首页、末页、目前页前后各 1 页，其余以「…」省略
+    const show = new Set([1, totalPages, studentPage, studentPage - 1, studentPage + 1]);
+    let prev = 0;
+    for (let p = 1; p <= totalPages; p++) {
+      if (!show.has(p)) continue;
+      if (p - prev > 1) nums += '<span class="page-ellipsis">…</span>';
+      nums += `<button class="page-btn${p === studentPage ? ' active' : ''}" onclick="gotoStudentPage(${p})">${p}</button>`;
+      prev = p;
+    }
+    nums =
+      `<button class="page-btn" onclick="gotoStudentPage(${studentPage - 1})"${studentPage === 1 ? ' disabled' : ''}>‹ 上一页</button>` +
+      nums +
+      `<button class="page-btn" onclick="gotoStudentPage(${studentPage + 1})"${studentPage === totalPages ? ' disabled' : ''}>下一页 ›</button>`;
+  }
+
+  el.innerHTML = `
+    <span class="pager-info">显示第 ${from}–${to} 笔，共 ${total} 笔</span>
+    <span class="pager-spacer"></span>
+    ${nums}
+    <label style="display:flex;align-items:center;gap:6px;white-space:nowrap">每页
+      <select onchange="setStudentPageSize(this.value)">${sizeOpts}</select>
+    </label>`;
 }
 
 // ════════════════════════════════════════════════
