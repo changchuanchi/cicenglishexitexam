@@ -115,19 +115,28 @@
   }
   thead tr.filter-row select:focus { border-color:var(--primary); outline:none; }
 
-  /* ── 学生总览：往下滑时冻结表头（黏在 topbar + 分页标签下方）──
-     --stick-top（topbar＋tabs 高度）与 --sthead-h（第一列表头高度）由 JS 量测写入。
+  /* ── 学生总览：往下滑时只有资料列滚动 ──
+     标题＋搜索列＋表头（含筛选列）全部黏在 topbar + 分页标签下方。
+     --stick-top（topbar＋tabs 高度）、--toolbar-h（标题＋搜索列高度）、
+     --sthead-h（第一列表头高度）皆由 JS 量测写入。
      需 overflow:visible 才能对整页 sticky，故仅在桌面版启用；窄萤幕维持横向卷动。 */
+  #studentsToolbar { background:#fff; }
   @media(min-width:901px){
+    #studentsToolbar {
+      position:sticky; top:var(--stick-top, 100px); z-index:20;
+      margin:-24px -24px 0; padding:24px 24px 12px;
+      border-radius:var(--radius) var(--radius) 0 0;
+      border-bottom:1px solid var(--gray-200);
+    }
     #studentsTable.has-table { overflow:visible; }
     #studentsTable.has-table thead th { position:sticky; z-index:5; }
     #studentsTable.has-table thead tr:first-child th {
-      top:var(--stick-top, 100px);
+      top:calc(var(--stick-top, 100px) + var(--toolbar-h, 120px));
       /* border-collapse 下 sticky 的 border 会消失，改用 inset 阴影 */
       border-bottom:none; box-shadow: inset 0 -1.5px 0 var(--gray-200);
     }
     #studentsTable.has-table thead tr.filter-row th {
-      top:calc(var(--stick-top, 100px) + var(--sthead-h, 41px)); z-index:4;
+      top:calc(var(--stick-top, 100px) + var(--toolbar-h, 120px) + var(--sthead-h, 41px)); z-index:4;
       border-bottom:none; box-shadow: inset 0 -1.5px 0 var(--gray-200);
     }
   }
@@ -283,13 +292,15 @@
         </div>
       </div>
       <div class="card">
-        <div class="card-title">学生考试状态总览</div>
-        <div class="search-bar">
-          <input type="text" id="studentSearch" placeholder="搜索学号、姓名或专业" oninput="filterStudents()">
-          <span id="studentCount" style="font-size:.82rem;color:var(--gray-500);white-space:nowrap"></span>
-          <button class="btn btn-outline" onclick="loadStudents()">刷新</button>
+        <div id="studentsToolbar">
+          <div class="card-title">学生考试状态总览</div>
+          <div class="search-bar">
+            <input type="text" id="studentSearch" placeholder="搜索学号、姓名或专业" oninput="filterStudents()">
+            <span id="studentCount" style="font-size:.82rem;color:var(--gray-500);white-space:nowrap"></span>
+            <button class="btn btn-outline" onclick="loadStudents()">刷新</button>
+          </div>
+          <p style="font-size:.78rem;color:var(--gray-500);margin:-4px 0 0">点栏位标题可排序；「专业」「状态」栏下方可筛选。</p>
         </div>
-        <p style="font-size:.78rem;color:var(--gray-500);margin:-4px 0 10px">点栏位标题可排序；「专业」「状态」栏下方可筛选。</p>
         <div id="studentsAlert"></div>
         <div class="table-wrap" id="studentsTable"><p style="color:var(--gray-500);font-size:.88rem">加载中…</p></div>
         <div class="pager" id="studentsPager"></div>
@@ -686,8 +697,10 @@ function gotoStudentPage(p) {
   // 换页后卷回表格顶端（若目前已卷过头才卷动）
   const wrap = document.getElementById('studentsTable');
   if (!wrap) return;
-  const stickTop = parseFloat(getComputedStyle(wrap).getPropertyValue('--stick-top')) || 100;
-  const top = wrap.getBoundingClientRect().top + window.scrollY - stickTop - 12;
+  const cs = getComputedStyle(document.documentElement);
+  const stickTop  = parseFloat(cs.getPropertyValue('--stick-top'))  || 100;
+  const toolbarH  = parseFloat(cs.getPropertyValue('--toolbar-h'))  || 120;
+  const top = wrap.getBoundingClientRect().top + window.scrollY - stickTop - toolbarH - 8;
   if (window.scrollY > top) window.scrollTo({ top, behavior:'smooth' });
 }
 
@@ -748,7 +761,8 @@ function renderStudentsTable() {
 
   if (!students.length) {
     wrap.classList.remove('has-table');
-    wrap.innerHTML = '<p style="color:var(--gray-500);font-size:.88rem">无符合条件的数据</p>';
+    wrap.innerHTML = '<p style="color:var(--gray-500);font-size:.88rem;padding-top:12px">无符合条件的数据</p>';
+    syncStickyHeadOffset();
     renderStudentsPager(0, 0, 0);
     return;
   }
@@ -804,15 +818,18 @@ function renderStudentsTable() {
   renderStudentsPager(students.length, start + 1, start + pageStudents.length);
 }
 
-// 量测冻结位置：topbar＋分页标签的总高度，以及第一列表头高度（筛选列黏在它下方）
+// 量测各层冻结高度：topbar＋分页标签 → 标题／搜索列 → 表头 → 筛选列
 function syncStickyHeadOffset() {
-  const wrap = document.getElementById('studentsTable');
-  if (!wrap) return;
+  const root = document.documentElement;
   const topbarH = document.querySelector('.topbar')?.offsetHeight || 54;
   const tabsH   = document.querySelector('.tabs')?.offsetHeight   || 46;
-  wrap.style.setProperty('--stick-top', (topbarH + tabsH) + 'px');
-  const firstRow = wrap.querySelector('thead tr');
-  if (firstRow) wrap.style.setProperty('--sthead-h', firstRow.getBoundingClientRect().height + 'px');
+  root.style.setProperty('--stick-top', (topbarH + tabsH) + 'px');
+
+  const bar = document.getElementById('studentsToolbar');
+  if (bar) root.style.setProperty('--toolbar-h', bar.getBoundingClientRect().height + 'px');
+
+  const firstRow = document.querySelector('#studentsTable thead tr');
+  if (firstRow) root.style.setProperty('--sthead-h', firstRow.getBoundingClientRect().height + 'px');
 }
 window.addEventListener('resize', syncStickyHeadOffset);
 
