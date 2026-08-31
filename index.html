@@ -8,8 +8,11 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --primary: #2563eb;
-    --primary-dark: #1d4ed8;
+    /* 主色取自 DPU LOGO 的品牌紫 #691BFF（白字对比 6.56:1，通过 WCAG AA） */
+    --primary: #691BFF;
+    --primary-dark: #5312CC;
+    --primary-50: #F6F2FF;
+    --primary-100: #EBE1FF;
     --success: #16a34a;
     --danger: #dc2626;
     --warning: #d97706;
@@ -19,15 +22,16 @@
     --gray-600: #4b5563;
     --gray-700: #374151;
     --gray-900: #111827;
-    --radius: 12px;
-    --shadow: 0 4px 24px rgba(0,0,0,0.10);
+    --radius: 16px;
+    --shadow: 0 1px 2px rgba(17,24,39,.04), 0 8px 28px rgba(76,17,184,.09);
+    --ring: 0 0 0 3px rgba(105,27,255,.16);
   }
 
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cpath d='M30,0 L60,30 L30,60 L0,30 Z' stroke='%232563eb' stroke-width='0.8' fill='none' opacity='0.13'/%3E%3Cpath d='M30,18 L42,30 L30,42 L18,30 Z' stroke='%232563eb' stroke-width='0.5' fill='none' opacity='0.06'/%3E%3Ccircle cx='30' cy='0' r='1.8' fill='%232563eb' opacity='0.18'/%3E%3Ccircle cx='60' cy='30' r='1.8' fill='%232563eb' opacity='0.18'/%3E%3Ccircle cx='30' cy='60' r='1.8' fill='%232563eb' opacity='0.18'/%3E%3Ccircle cx='0' cy='30' r='1.8' fill='%232563eb' opacity='0.18'/%3E%3Ccircle cx='30' cy='30' r='1.2' fill='%232563eb' opacity='0.1'/%3E%3C/svg%3E"),
-      linear-gradient(135deg, #dbeafe 0%, #e0f2fe 60%, #ede9fe 100%);
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cpath d='M30,0 L60,30 L30,60 L0,30 Z' stroke='%23691BFF' stroke-width='0.8' fill='none' opacity='0.10'/%3E%3Cpath d='M30,18 L42,30 L30,42 L18,30 Z' stroke='%23691BFF' stroke-width='0.5' fill='none' opacity='0.05'/%3E%3Ccircle cx='30' cy='0' r='1.8' fill='%23691BFF' opacity='0.13'/%3E%3Ccircle cx='60' cy='30' r='1.8' fill='%23691BFF' opacity='0.13'/%3E%3Ccircle cx='30' cy='60' r='1.8' fill='%23691BFF' opacity='0.13'/%3E%3Ccircle cx='0' cy='30' r='1.8' fill='%23691BFF' opacity='0.13'/%3E%3Ccircle cx='30' cy='30' r='1.2' fill='%23691BFF' opacity='0.08'/%3E%3C/svg%3E"),
+      linear-gradient(135deg, #EFEAFF 0%, #F5F1FF 55%, #E9E3FF 100%);
     min-height: 100vh;
     display: flex;
     flex-direction: column;
@@ -41,13 +45,29 @@
     text-align: center;
     margin-bottom: 28px;
   }
-  .logo h1 { font-size: 1.6rem; font-weight: 700; color: var(--primary-dark); }
+  .logo h1 { font-size: 1.6rem; font-weight: 700; color: var(--primary-dark); letter-spacing: -.01em; }
   .logo p  { font-size: .9rem; color: var(--gray-600); margin-top: 4px; }
+
+  /* 标题下方的两颗入口按钮 */
+  .chip-link {
+    display: inline-block; margin-top: 12px; padding: 6px 16px;
+    font-size: .85rem; font-weight: 500; text-decoration: none;
+    color: var(--primary-dark); background: rgba(255,255,255,.7);
+    border: 1.5px solid var(--primary-100); border-radius: 99px;
+    transition: all .18s;
+  }
+  .chip-link + .chip-link { margin-left: 8px; }
+  .chip-link:hover {
+    background: #fff; border-color: var(--primary);
+    color: var(--primary); transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(105,27,255,.14);
+  }
 
   .card {
     background: #fff;
     border-radius: var(--radius);
     box-shadow: var(--shadow);
+    border: 1px solid rgba(105,27,255,.06);
     padding: 36px 40px;
     width: 100%;
     max-width: 480px;
@@ -63,18 +83,26 @@
   input[type="text"], select {
     width: 100%; padding: 12px 14px;
     border: 1.5px solid var(--gray-200); border-radius: 8px;
-    font-size: 1rem; font-family: inherit; outline: none; transition: border .2s;
+    font-size: 1rem; font-family: inherit; outline: none;
+    transition: border-color .18s, box-shadow .18s;
     background: #fff;
   }
-  input[type="text"]:focus, select:focus { border-color: var(--primary); }
+  input[type="text"]:focus, select:focus {
+    border-color: var(--primary); box-shadow: var(--ring);
+  }
 
   .btn {
     display: inline-block; padding: 12px 24px;
-    border: none; border-radius: 8px; cursor: pointer;
-    font-size: .95rem; font-weight: 600; transition: all .2s; text-align: center;
+    border: none; border-radius: 10px; cursor: pointer;
+    font-size: .95rem; font-weight: 600; transition: all .18s; text-align: center;
   }
+  .btn:active { transform: none; }
   .btn-primary { background: var(--primary); color: #fff; width: 100%; }
-  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-primary:hover {
+    background: var(--primary-dark);
+    box-shadow: 0 6px 18px rgba(105,27,255,.30); transform: translateY(-1px);
+  }
+  .btn-primary:disabled { box-shadow: none; transform: none; }
   .btn-primary:disabled { background: var(--gray-200); color: var(--gray-600); cursor: not-allowed; }
   .btn-success { background: var(--success); color: #fff; }
   .btn-outline  { background: transparent; border: 1.5px solid var(--gray-200); color: var(--gray-700); }
@@ -112,7 +140,7 @@
     font-size: .88rem; margin-bottom: 16px;
   }
   .alert-error  { background: #fee2e2; color: var(--danger); }
-  .alert-info   { background: #eff6ff; color: var(--primary); }
+  .alert-info   { background: var(--primary-50); color: var(--primary-dark); }
 
   /* ── 考试画面 ── */
   #examScreen { max-width: 700px; }
@@ -130,8 +158,8 @@
   .timer.danger  { background: var(--danger); }
 
   .question-card {
-    background: var(--gray-50); border-radius: 10px;
-    padding: 20px; margin-bottom: 20px;
+    background: var(--gray-50); border: 1px solid var(--gray-100);
+    border-radius: 12px; padding: 20px; margin-bottom: 20px;
   }
   .question-text {
     font-size: 1rem; font-weight: 500; margin-bottom: 14px; line-height: 1.6;
@@ -148,9 +176,12 @@
     padding: 10px 14px; border: 1.5px solid var(--gray-200);
     border-radius: 8px; cursor: pointer; transition: all .15s; background: #fff;
   }
-  .option:hover { border-color: var(--primary); background: #eff6ff; }
+  .option:hover { border-color: var(--primary-100); background: var(--primary-50); }
   .option input[type="radio"] { margin-top: 2px; accent-color: var(--primary); flex-shrink: 0; }
-  .option.selected { border-color: var(--primary); background: #eff6ff; }
+  .option.selected {
+    border-color: var(--primary); background: var(--primary-50);
+    box-shadow: 0 0 0 3px rgba(105,27,255,.12);
+  }
 
   .nav-buttons {
     display: flex; gap: 10px; justify-content: space-between; margin-top: 20px;
@@ -192,15 +223,11 @@
   <img src="dpu%20logo.png" alt="DPU Logo" style="height:64px;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto;">
   <h1>博仁大学中文国际学院英文毕业考试系统</h1>
 
-  <a href="admin.html" style="display:inline-block;margin-top:10px;font-size:.85rem;
-     color:var(--primary);text-decoration:none;border:1.5px solid var(--primary);
-     border-radius:7px;padding:5px 16px;">管理员入口</a>
+  <a href="admin.html" class="chip-link">管理员入口</a>
 
   <a href="https://changchuanchi.github.io/ciclearninghub/cicenglishexitexam_testbank.html"
      target="_blank" rel="noopener"
-     style="display:inline-block;margin-top:10px;margin-left:8px;font-size:.85rem;
-     color:var(--primary);text-decoration:none;border:1.5px solid var(--primary);
-     border-radius:7px;padding:5px 16px;">题库练习</a>
+     class="chip-link">题库练习</a>
 </div>
 
 <!-- ①登录 -->

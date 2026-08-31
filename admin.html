@@ -8,26 +8,32 @@
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --primary: #2563eb; --primary-dark: #1d4ed8;
+    /* 主色取自 DPU LOGO 的品牌紫 #691BFF（白字对比 6.56:1，通过 WCAG AA） */
+    --primary: #691BFF; --primary-dark: #5312CC;
+    --primary-50: #F6F2FF; --primary-100: #EBE1FF;
     --success: #16a34a; --danger: #dc2626; --warning: #d97706;
     --gray-50: #f9fafb; --gray-100: #f3f4f6; --gray-200: #e5e7eb;
     --gray-300: #d1d5db; --gray-500: #6b7280; --gray-600: #4b5563;
     --gray-700: #374151; --gray-900: #111827;
-    --radius: 10px; --shadow: 0 2px 16px rgba(0,0,0,.08);
+    --radius: 14px;
+    --shadow: 0 1px 2px rgba(17,24,39,.04), 0 6px 20px rgba(17,24,39,.06);
+    --shadow-lg: 0 2px 4px rgba(17,24,39,.05), 0 14px 36px rgba(76,17,184,.12);
+    --ring: 0 0 0 3px rgba(105,27,255,.16);
   }
   body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-    background:var(--gray-50); color:var(--gray-900); min-height:100vh; }
+    background:#F7F5FC; color:var(--gray-900); min-height:100vh; }
 
   /* ── Login ── */
   #loginWrap {
     display:flex; align-items:center; justify-content:center;
     min-height:100vh; padding:20px;
     background:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cpath d='M30,0 L60,30 L30,60 L0,30 Z' stroke='%232563eb' stroke-width='0.8' fill='none' opacity='0.13'/%3E%3Cpath d='M30,18 L42,30 L30,42 L18,30 Z' stroke='%232563eb' stroke-width='0.5' fill='none' opacity='0.06'/%3E%3Ccircle cx='30' cy='0' r='1.8' fill='%232563eb' opacity='0.18'/%3E%3Ccircle cx='60' cy='30' r='1.8' fill='%232563eb' opacity='0.18'/%3E%3Ccircle cx='30' cy='60' r='1.8' fill='%232563eb' opacity='0.18'/%3E%3Ccircle cx='0' cy='30' r='1.8' fill='%232563eb' opacity='0.18'/%3E%3Ccircle cx='30' cy='30' r='1.2' fill='%232563eb' opacity='0.1'/%3E%3C/svg%3E"),
-      linear-gradient(135deg,#dbeafe,#e0f2fe 60%,#ede9fe);
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cpath d='M30,0 L60,30 L30,60 L0,30 Z' stroke='%23691BFF' stroke-width='0.8' fill='none' opacity='0.10'/%3E%3Cpath d='M30,18 L42,30 L30,42 L18,30 Z' stroke='%23691BFF' stroke-width='0.5' fill='none' opacity='0.05'/%3E%3Ccircle cx='30' cy='0' r='1.8' fill='%23691BFF' opacity='0.13'/%3E%3Ccircle cx='60' cy='30' r='1.8' fill='%23691BFF' opacity='0.13'/%3E%3Ccircle cx='30' cy='60' r='1.8' fill='%23691BFF' opacity='0.13'/%3E%3Ccircle cx='0' cy='30' r='1.8' fill='%23691BFF' opacity='0.13'/%3E%3Ccircle cx='30' cy='30' r='1.2' fill='%23691BFF' opacity='0.08'/%3E%3C/svg%3E"),
+      linear-gradient(135deg,#EFEAFF,#F5F1FF 55%,#E9E3FF);
   }
   .login-card {
-    background:#fff; border-radius:14px; box-shadow:var(--shadow);
+    background:#fff; border-radius:18px; box-shadow:var(--shadow-lg);
+    border:1px solid rgba(105,27,255,.07);
     padding:40px; width:100%; max-width:480px;
   }
   .login-card h1 { font-size:1.3rem; font-weight:700; margin-bottom:4px; }
@@ -36,7 +42,8 @@
   /* ── Shell ── */
   #appWrap { display:none; flex-direction:column; min-height:100vh; }
   .topbar {
-    background:var(--primary-dark); color:#fff;
+    background:linear-gradient(90deg,var(--primary-dark),var(--primary)); color:#fff;
+    box-shadow:0 1px 0 rgba(17,24,39,.06);
     padding:0 24px; height:54px;
     display:flex; align-items:center; justify-content:space-between;
     position:sticky; top:0; z-index:100; gap:12px;
@@ -59,7 +66,7 @@
     border-bottom:2.5px solid transparent; color:var(--gray-500);
     transition:all .15s; white-space:nowrap; flex-shrink:0;
   }
-  .tab:hover { color:var(--primary); }
+  .tab:hover { color:var(--primary); background:var(--primary-50); }
   .tab.active { color:var(--primary); border-bottom-color:var(--primary); font-weight:600; }
 
   .content { flex:1; padding:28px 32px; max-width:1280px; margin:0 auto; width:100%; }
@@ -67,15 +74,19 @@
   .panel.active { display:block; }
 
   /* ── Cards ── */
-  .card { background:#fff; border-radius:var(--radius); box-shadow:var(--shadow); padding:24px; margin-bottom:20px; }
+  .card { background:#fff; border-radius:var(--radius); box-shadow:var(--shadow); border:1px solid rgba(17,24,39,.05); padding:24px; margin-bottom:20px; }
   .card-title { font-size:1rem; font-weight:600; margin-bottom:16px; color:var(--gray-700); }
 
   /* ── Buttons ── */
-  .btn { display:inline-block; padding:9px 18px; border:none; border-radius:7px;
+  .btn { display:inline-block; padding:9px 18px; border:none; border-radius:9px;
     cursor:pointer; font-size:.87rem; font-weight:600; transition:all .15s; }
+  .btn:active { transform:none; }
   .btn-primary { background:var(--primary); color:#fff; }
-  .btn-primary:hover { background:var(--primary-dark); }
-  .btn-primary:disabled { background:var(--gray-200); color:var(--gray-500); cursor:not-allowed; }
+  .btn-primary:hover {
+    background:var(--primary-dark);
+    box-shadow:0 5px 14px rgba(105,27,255,.28); transform:translateY(-1px);
+  }
+  .btn-primary:disabled { background:var(--gray-200); color:var(--gray-500); cursor:not-allowed; box-shadow:none; transform:none; }
   .btn-success { background:var(--success); color:#fff; }
   .btn-success:hover { filter:brightness(1.08); }
   .btn-danger  { background:var(--danger); color:#fff; }
@@ -93,10 +104,10 @@
   .form-group { margin-bottom:14px; }
   .form-group label { display:block; font-size:.82rem; font-weight:500; margin-bottom:5px; color:var(--gray-600); }
   input[type="text"],input[type="password"],select,textarea {
-    width:100%; padding:9px 12px; border:1.5px solid var(--gray-200); border-radius:7px;
-    font-size:.9rem; outline:none; transition:border .2s; font-family:inherit;
+    width:100%; padding:9px 12px; border:1.5px solid var(--gray-200); border-radius:9px;
+    font-size:.9rem; outline:none; transition:border-color .18s, box-shadow .18s; font-family:inherit;
   }
-  input:focus,select:focus,textarea:focus { border-color:var(--primary); }
+  input:focus,select:focus,textarea:focus { border-color:var(--primary); box-shadow:var(--ring); }
 
   /* ── Tables ── */
   .table-wrap { overflow-x:auto; }
@@ -107,7 +118,7 @@
     white-space:nowrap;
   }
   tbody td { padding:9px 12px; border-bottom:1px solid var(--gray-100); }
-  tbody tr:hover { background:var(--gray-50); }
+  tbody tr:hover { background:var(--primary-50); }
   thead th.sortable { cursor:pointer; user-select:none; }
   thead th.sortable:hover { background:var(--gray-100); color:var(--primary); }
   thead th.sorted { color:var(--primary); }
@@ -155,8 +166,8 @@
   .pager select { width:auto; padding:5px 8px; font-size:.82rem; }
   .page-btn {
     min-width:32px; padding:5px 9px; border:1.5px solid var(--gray-200); background:#fff;
-    border-radius:6px; cursor:pointer; font-size:.82rem; font-weight:600; color:var(--gray-700);
-    font-family:inherit;
+    border-radius:8px; cursor:pointer; font-size:.82rem; font-weight:600; color:var(--gray-700);
+    font-family:inherit; transition:all .15s;
   }
   .page-btn:hover:not(:disabled) { border-color:var(--primary); color:var(--primary); }
   .page-btn:disabled { color:var(--gray-300); cursor:not-allowed; }
@@ -167,13 +178,13 @@
   .badge-green  { background:#dcfce7; color:var(--success); }
   .badge-red    { background:#fee2e2; color:var(--danger); }
   .badge-yellow { background:#fef9c3; color:var(--warning); }
-  .badge-blue   { background:#dbeafe; color:var(--primary); }
+  .badge-blue   { background:var(--primary-100); color:var(--primary-dark); }
   .badge-gray   { background:var(--gray-100); color:var(--gray-600); }
 
   .alert { padding:11px 15px; border-radius:7px; font-size:.86rem; margin-bottom:14px; }
   .alert-error   { background:#fee2e2; color:var(--danger); }
   .alert-success { background:#dcfce7; color:var(--success); }
-  .alert-info    { background:#eff6ff; color:var(--primary); }
+  .alert-info    { background:var(--primary-50); color:var(--primary-dark); }
   .alert-warning { background:#fef9c3; color:var(--warning); }
 
   /* ── Upload ── */
@@ -182,7 +193,7 @@
     padding:36px; text-align:center; cursor:pointer;
     transition:all .2s; color:var(--gray-500);
   }
-  .upload-zone:hover,.upload-zone.dragover { border-color:var(--primary); color:var(--primary); background:#eff6ff; }
+  .upload-zone:hover,.upload-zone.dragover { border-color:var(--primary); color:var(--primary); background:var(--primary-50); }
   .upload-icon { font-size:2.5rem; margin-bottom:8px; }
   .upload-hint { font-size:.82rem; margin-top:6px; }
   #fileInput { display:none; }
@@ -200,9 +211,9 @@
   }
   .modal-bg.open { display:flex; }
   .modal {
-    background:#fff; border-radius:14px; padding:28px;
+    background:#fff; border-radius:18px; padding:28px;
     width:100%; max-width:520px; max-height:92vh; overflow-y:auto;
-    box-shadow:0 8px 40px rgba(0,0,0,.2);
+    box-shadow:0 12px 48px rgba(17,24,39,.22);
   }
   .modal h3 { font-size:1.1rem; font-weight:700; margin-bottom:18px; }
   .modal-footer { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; }
@@ -269,7 +280,7 @@
       <button class="btn btn-ghost btn-sm" onclick="doLogout()">登出</button>
     </div>
   </div>
-  <div id="returnBar" style="background:#eff6ff;border-bottom:1px solid #bfdbfe;padding:10px 16px;text-align:center">
+  <div id="returnBar" style="background:var(--primary-50);border-bottom:1px solid var(--primary-100);padding:10px 16px;text-align:center">
     <a href="index.html" style="font-size:.88rem;color:var(--primary);text-decoration:none;font-weight:500">
       ← 博仁大学中文国际学院英文毕业考试系统
     </a>
