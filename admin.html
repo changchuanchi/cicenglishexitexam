@@ -487,6 +487,7 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbymKvDkRyWPAMgm9YOh9h54
 let session = { token: '', name: '', employeeId: '', role: '' };
 let allStudents  = [];
 let allQuestions = [];
+let allAdmins    = [];   // 供表格按钮以索引回查（避免把姓名塞进 onclick 字串）
 let exportCache  = null;
 let studentSort   = { key: '', dir: 1 };          // 排序状态：key=栏位、dir=1 升序 / -1 降序
 let studentFilter = { dept: '', status: '' };     // 栏位筛选：专业、状态
@@ -718,7 +719,7 @@ function refreshDeptFilter() {
   const depts = [...new Set(allStudents.map(s => s.dept).filter(d => d!=='' && d!=null))].sort();
   const cur = studentFilter.dept;
   sel.innerHTML = '<option value="">全部专业</option>' +
-    depts.map(d => `<option value="${d}"${d===cur?' selected':''}>${d}</option>`).join('');
+    depts.map(d => `<option value="${esc(d)}"${d===cur?' selected':''}>${esc(d)}</option>`).join('');
 }
 
 // 套用搜索 + 栏位筛选 + 排序，回传要显示的清单
@@ -786,12 +787,12 @@ function renderStudentsTable() {
     const badge = `<span class="badge ${st.cls}">${st.label}</span>`;
     const d = s.lastExamDate ? new Date(s.lastExamDate).toLocaleDateString('zh-CN') : '—';
     return `<tr>
-      <td>${s.studentId}</td><td>${s.name}</td><td>${val(s.dept)}</td>
-      <td>${val(s.firstScore)}</td>
-      <td>${val(s.secondScore)}</td>
+      <td>${esc(s.studentId)}</td><td>${esc(s.name)}</td><td>${esc(val(s.dept))}</td>
+      <td>${esc(val(s.firstScore))}</td>
+      <td>${esc(val(s.secondScore))}</td>
       <td>${badge}</td>
-      <td>${val(s.bestScore)}</td>
-      <td>${d}</td></tr>`;
+      <td>${esc(val(s.bestScore))}</td>
+      <td>${esc(d)}</td></tr>`;
   }).join('');
 
   const head = STUDENT_COLS.map(c => {
@@ -903,15 +904,17 @@ function renderQuestionsTable() {
   if (!allQuestions.length) {
     document.getElementById('questionsTable').innerHTML = '<p style="color:var(--gray-500);font-size:.88rem">题库为空</p>'; return;
   }
-  const rows = allQuestions.map(q =>
+  // 传索引而非整个物件：题目内含撇号（don't、I'm…）会提早关掉 onclick 属性，
+  // 造成该题「编辑」按钮抛 SyntaxError、点了没反应（题库 100 题里有 23 题中招）
+  const rows = allQuestions.map((q, i) =>
     `<tr>
-      <td style="width:50px">${q.questionId}</td>
-      <td style="max-width:300px;word-break:break-all">${q.text}</td>
-      <td><span class="badge badge-gray">A</span> ${q.optionA}</td>
-      <td><span class="badge badge-blue">${q.answer}</span></td>
+      <td style="width:50px">${esc(q.questionId)}</td>
+      <td style="max-width:300px;word-break:break-all">${esc(q.text)}</td>
+      <td><span class="badge badge-gray">A</span> ${esc(q.optionA)}</td>
+      <td><span class="badge badge-blue">${esc(q.answer)}</span></td>
       <td>
-        <button class="btn btn-outline btn-sm" onclick='openQuestionModal(${JSON.stringify(q)})'>编辑</button>
-        <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="deleteQuestion(${q.questionId})">删除</button>
+        <button class="btn btn-outline btn-sm" onclick="openQuestionModal(allQuestions[${i}])">编辑</button>
+        <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="deleteQuestion(${Number(q.questionId)})">删除</button>
       </td>
     </tr>`).join('');
   document.getElementById('questionsTable').innerHTML = `
@@ -1020,21 +1023,23 @@ async function loadAdmins() {
 }
 
 function renderAdminsTable(admins) {
+  allAdmins = admins;
   if (!admins.length) {
     document.getElementById('adminsTable').innerHTML = '<p style="color:var(--gray-500);font-size:.88rem">无账号</p>'; return;
   }
-  const rows = admins.map(a => {
+  // 同样传索引：姓名含撇号会撑破 onclick 的字串参数
+  const rows = admins.map((a, i) => {
     const isSelf = a.employeeId === session.employeeId;
     const lastLogin = a.lastLogin ? new Date(a.lastLogin).toLocaleString('zh-CN') : '从未登录';
     return `<tr>
-      <td>${a.employeeId} ${isSelf ? '<span class="badge badge-blue">本人</span>':''}</td>
-      <td>${a.name}</td>
+      <td>${esc(a.employeeId)} ${isSelf ? '<span class="badge badge-blue">本人</span>':''}</td>
+      <td>${esc(a.name)}</td>
       <td>${a.mustChange
         ? '<span class="badge badge-yellow">需修改密码</span>'
         : '<span class="badge badge-green">正常</span>'}</td>
-      <td>${lastLogin}</td>
+      <td>${esc(lastLogin)}</td>
       <td>${!isSelf
-        ? `<button class="btn btn-warning btn-sm" onclick="resetPassword('${a.employeeId}','${a.name}')">重设密码</button>`
+        ? `<button class="btn btn-warning btn-sm" onclick="resetPassword(${i})">重设密码</button>`
         : '—'}</td>
     </tr>`;
   }).join('');
@@ -1061,7 +1066,10 @@ async function submitAddAdmin() {
   } catch { showEl('addAdminAlert','连线失败','error'); }
 }
 
-async function resetPassword(empId, name) {
+async function resetPassword(idx) {
+  const a = allAdmins[idx];
+  if (!a) return;
+  const empId = a.employeeId, name = a.name;
   if (!confirm(`确定重设「${name}（${empId}）」的密码为预设密码？`)) return;
   try {
     const res = await api('POST', { action:'resetAdminPassword', token: session.token, targetEmployeeId: empId });
@@ -1071,6 +1079,15 @@ async function resetPassword(empId, name) {
 }
 
 // ── 工具 ──
+// 所有来自学生输入或 Sheets 的字串，插进 innerHTML 前一律先过这里。
+// 不跳脱的话，学生把姓名填成 <img src=x onerror=...> 就会在管理员浏览器里执行。
+function esc(v) {
+  if (v === null || v === undefined) return '';
+  return String(v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 async function api(method, params) {
   if (method === 'GET') {
     const r = await fetch(`${GAS_URL}?${new URLSearchParams(params)}`);
@@ -1083,7 +1100,8 @@ async function api(method, params) {
 function showEl(id, msg, type) {
   const el = document.getElementById(id);
   if (!el) return;
-  el.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+  // 讯息可能夹带姓名或后端回传字串，一律跳脱（所有呼叫端都只传纯文字）
+  el.innerHTML = `<div class="alert alert-${type}">${esc(msg)}</div>`;
   el.style.display = 'block';
   if (type === 'success') setTimeout(() => { el.innerHTML = ''; el.style.display = 'none'; }, 4000);
 }

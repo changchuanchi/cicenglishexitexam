@@ -313,11 +313,14 @@ async function loadDepartments() {
 }
 
 let currentStudent = null;
+let examToken      = '';   // 发题时由后端配发，交卷时带回验证
 let questions      = [];
 let answers        = {};
 let currentIdx     = 0;
 let timerInterval  = null;
-let secondsLeft    = 60 * 60;
+const EXAM_SECONDS = 60 * 60;
+let examDeadline   = 0;            // 交卷时刻（epoch 毫秒），倒数一律以此回推
+let secondsLeft    = EXAM_SECONDS; // 仅供显示与计算作答秒数，实际时限看 examDeadline
 
 // ── 画面切换 ──
 function showScreen(id) {
@@ -345,10 +348,11 @@ async function handleLogin() {
     if (!res.success) { showError('loginError', res.error || '无法获取题目'); return; }
 
     currentStudent = { studentId: id, name, dept };
+    examToken   = res.examToken || '';
     questions   = res.questions;
     answers     = {};
     currentIdx  = 0;
-    secondsLeft = 60 * 60;
+    secondsLeft = EXAM_SECONDS;
     renderQuestion();
     startTimer();
     showScreen('examScreen');
@@ -408,17 +412,36 @@ function navigate(dir) {
 }
 
 // ── 计时器 ──
+// 以「截止时刻」回推剩余秒数，而非每秒递减计数。
+// 递减写法在分页切到背景、手机锁屏时会被浏览器节流甚至暂停，
+// 学生切出去多久就等于多赚多久，实际可作答时间会超过 60 分钟。
 function startTimer() {
   clearInterval(timerInterval);
-  timerInterval = setInterval(() => {
-    secondsLeft--;
-    const m = Math.floor(secondsLeft / 60);
-    const s = secondsLeft % 60;
-    const el = document.getElementById('timer');
+  examDeadline = Date.now() + EXAM_SECONDS * 1000;
+  tickTimer();                                   // 立即更新一次，不必等第一秒
+  timerInterval = setInterval(tickTimer, 1000);
+  // 从背景切回来时立刻补上真实经过的时间，不等下一次 tick
+  document.addEventListener('visibilitychange', onVisible);
+}
+
+function onVisible() { if (!document.hidden && timerInterval) tickTimer(); }
+
+function tickTimer() {
+  secondsLeft = Math.max(0, Math.round((examDeadline - Date.now()) / 1000));
+  const m = Math.floor(secondsLeft / 60);
+  const s = secondsLeft % 60;
+  const el = document.getElementById('timer');
+  if (el) {
     el.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
     el.className = 'timer' + (secondsLeft <= 300 ? ' danger' : secondsLeft <= 600 ? ' warning' : '');
-    if (secondsLeft <= 0) { clearInterval(timerInterval); submitExamData(); }
-  }, 1000);
+  }
+  if (secondsLeft <= 0) { stopTimer(); submitExamData(); }
+}
+
+function stopTimer() {
+  clearInterval(timerInterval);
+  timerInterval = null;
+  document.removeEventListener('visibilitychange', onVisible);
 }
 
 // ── 交卷 ──
@@ -436,8 +459,8 @@ function handleSubmit() {
 }
 
 async function submitExamData() {
-  clearInterval(timerInterval);
-  const timeTaken = 60 * 60 - secondsLeft;
+  stopTimer();
+  const timeTaken = EXAM_SECONDS - secondsLeft;
   const btn = document.getElementById('submitBtn');
   btn.disabled = true; btn.textContent = '提交中…';
 
@@ -447,6 +470,7 @@ async function submitExamData() {
       studentId : currentStudent.studentId,
       name      : currentStudent.name,
       dept      : currentStudent.dept,
+      examToken,
       answers,
       timeTaken
     });
@@ -472,8 +496,9 @@ function showResult(res) {
 
 function logout() {
   currentStudent = null;
+  examToken = '';
   questions = []; answers = {}; currentIdx = 0;
-  clearInterval(timerInterval);
+  stopTimer();
   document.getElementById('studentIdInput').value = '';
   document.getElementById('studentNameInput').value = '';
   document.getElementById('studentDeptInput').value = '';
