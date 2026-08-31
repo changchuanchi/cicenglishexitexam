@@ -45,10 +45,14 @@
   .topbar-right { display:flex; align-items:center; gap:10px; font-size:.84rem; }
   .topbar-name  { opacity:.85; white-space:nowrap; }
 
+  /* 返回列钉在 topbar 下方，分页标签再钉在返回列下方；
+     --topbar-h、--returnbar-h 由 JS 量测写入（fallback 为设计值）*/
+  #returnBar { position:sticky; top:var(--topbar-h, 54px); z-index:99; }
+
   .tabs {
     background:#fff; border-bottom:1px solid var(--gray-200);
     display:flex; padding:0 24px; gap:0; overflow-x:auto;
-    position:sticky; top:54px; z-index:99;
+    position:sticky; top:calc(var(--topbar-h, 54px) + var(--returnbar-h, 41px)); z-index:98;
   }
   .tab {
     padding:13px 18px; font-size:.87rem; font-weight:500; cursor:pointer;
@@ -265,7 +269,7 @@
       <button class="btn btn-ghost btn-sm" onclick="doLogout()">登出</button>
     </div>
   </div>
-  <div style="background:#eff6ff;border-bottom:1px solid #bfdbfe;padding:10px 16px;text-align:center">
+  <div id="returnBar" style="background:#eff6ff;border-bottom:1px solid #bfdbfe;padding:10px 16px;text-align:center">
     <a href="index.html" style="font-size:.88rem;color:var(--primary);text-decoration:none;font-weight:500">
       ← 博仁大学中文国际学院英文毕业考试系统
     </a>
@@ -818,12 +822,15 @@ function renderStudentsTable() {
   renderStudentsPager(students.length, start + 1, start + pageStudents.length);
 }
 
-// 量测各层冻结高度：topbar＋分页标签 → 标题／搜索列 → 表头 → 筛选列
+// 量测各层冻结高度：topbar → 返回列 → 分页标签 → 标题／搜索列 → 表头 → 筛选列
 function syncStickyHeadOffset() {
   const root = document.documentElement;
-  const topbarH = document.querySelector('.topbar')?.offsetHeight || 54;
-  const tabsH   = document.querySelector('.tabs')?.offsetHeight   || 46;
-  root.style.setProperty('--stick-top', (topbarH + tabsH) + 'px');
+  const topbarH    = document.querySelector('.topbar')?.offsetHeight || 54;
+  const returnBarH = document.getElementById('returnBar')?.offsetHeight || 41;
+  const tabsH      = document.querySelector('.tabs')?.offsetHeight   || 46;
+  root.style.setProperty('--topbar-h', topbarH + 'px');
+  root.style.setProperty('--returnbar-h', returnBarH + 'px');
+  root.style.setProperty('--stick-top', (topbarH + returnBarH + tabsH) + 'px');
 
   const bar = document.getElementById('studentsToolbar');
   if (bar) root.style.setProperty('--toolbar-h', bar.getBoundingClientRect().height + 'px');
@@ -831,7 +838,16 @@ function syncStickyHeadOffset() {
   const firstRow = document.querySelector('#studentsTable thead tr');
   if (firstRow) root.style.setProperty('--sthead-h', firstRow.getBoundingClientRect().height + 'px');
 }
-window.addEventListener('resize', syncStickyHeadOffset);
+// 用 ResizeObserver 盯住各固定层：换行、字级变化都会即时重算。
+// 只听 resize 事件会量到旧高度，各层之间就会出现空隙或互相盖住。
+(function watchStickyLayers() {
+  if (!window.ResizeObserver) { window.addEventListener('resize', syncStickyHeadOffset); return; }
+  const ro = new ResizeObserver(syncStickyHeadOffset);
+  ['.topbar', '#returnBar', '.tabs', '#studentsToolbar'].forEach(sel => {
+    const el = document.querySelector(sel);
+    if (el) ro.observe(el);
+  });
+})();
 
 // 分页控制列：每页笔数 ＋ 页码 ＋ 显示范围
 function renderStudentsPager(total, from, to) {
