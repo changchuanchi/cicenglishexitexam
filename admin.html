@@ -560,14 +560,35 @@ let studentPage     = 1;                          // 学生总览目前页码（
 let studentPageSize = 50;                         // 每页笔数；0 = 全部
 let examConfig   = { open: true, password: '' };
 
+// ── 登入状态储存（localStorage：跨分页共用、回考试系统再回来不必重登）──
+// 用 localStorage 而非 sessionStorage，因为「管理员入口」在考试系统是开新分页，
+// sessionStorage 每分页独立会读不到；localStorage 同源共用即可延续登入。
+// 安全上以「最后活动时间」把关：距上次操作超过 IDLE_LIMIT_MS 即视为过期，须重登。
+const SESS_KEY = 'adminSession';
+const ACT_KEY  = 'adminLastActive';
+function saveSession() {
+  try { localStorage.setItem(SESS_KEY, JSON.stringify(session)); localStorage.setItem(ACT_KEY, String(Date.now())); } catch (e) {}
+}
+function clearSession() {
+  try { localStorage.removeItem(SESS_KEY); localStorage.removeItem(ACT_KEY); } catch (e) {}
+}
+
 // ── 闲置自动登出 ──
 // 登入后切换分页／操作都不会登出；只有「一段时间完全没有操作」才自动登出（共用电脑安全）。
 const IDLE_LIMIT_MS = 30 * 60 * 1000;   // 30 分钟无操作即自动登出
 let lastActivity = Date.now();
+let lastPersist  = 0;
 let idleChecker  = null;
-function markActivity() { lastActivity = Date.now(); }
+function markActivity() {
+  lastActivity = Date.now();
+  // 节流写入 localStorage（最多每 15 秒一次），让「最后活动时间」跨分页/刷新可见
+  if (session.token && lastActivity - lastPersist > 15000) {
+    lastPersist = lastActivity;
+    try { localStorage.setItem(ACT_KEY, String(lastActivity)); } catch (e) {}
+  }
+}
 function startIdleWatch() {
-  markActivity();
+  lastActivity = Date.now();
   ['click','keydown','mousemove','wheel','scroll','touchstart'].forEach(ev =>
     document.addEventListener(ev, markActivity, { passive: true }));
   if (!idleChecker) idleChecker = setInterval(() => {
@@ -592,7 +613,7 @@ async function doLogin() {
     if (!res.success) { showEl('loginAlert', res.error || '登录失败', 'error'); return; }
 
     session = { token: res.token, name: res.name, employeeId: res.employeeId, role: res.role };
-    sessionStorage.setItem('adminSession', JSON.stringify(session));
+    saveSession();   // 存 localStorage（跨分页共用）—— 回考试系统再回来不必重登
     _sessionExpiredHandled = false;
 
     document.getElementById('loginWrap').style.display = 'none';
@@ -612,7 +633,7 @@ function doLogout() {
   stopLiveAuto();
   liveLoaded = false; analysisLoaded = false;   // 重新登录时再懒加载
   session = { token:'', name:'', employeeId:'', role:'' };
-  sessionStorage.removeItem('adminSession');
+  clearSession();
   document.getElementById('loginWrap').style.display = 'flex';
   document.getElementById('appWrap').style.display   = 'none';
   document.getElementById('empIdInput').value = '';
@@ -1461,19 +1482,29 @@ function applyRolePermissions() {
   setSuffix('（一般管理员）');
 }
 
-// 恢复 session（若同一页刷新）—— 坏掉的暂存要清掉退回登录，否则每次载入都炸
-const saved = sessionStorage.getItem('adminSession');
+// 恢复 session（刷新／回考试系统再回来／新分页）——
+// localStorage 同源共用，回来即可延续；但距上次操作超过 30 分钟视为过期，须重登（共用电脑安全）。
+// 坏掉的暂存要清掉退回登录，否则每次载入都炸。
+const saved = (function(){ try { return localStorage.getItem(SESS_KEY); } catch (e) { return null; } })();
 if (saved) {
   try {
     session = JSON.parse(saved);
     if (!session || !session.token) throw new Error('no token');
-    document.getElementById('loginWrap').style.display = 'none';
-    document.getElementById('appWrap').style.display   = 'flex';
-    document.getElementById('topbarName').textContent  = `${session.name}（${session.employeeId}）`;
-    applyRolePermissions();
-    loadAllData();
+    const act = Number((function(){ try { return localStorage.getItem(ACT_KEY); } catch (e) { return 0; } })()) || 0;
+    if (!act || (Date.now() - act) > IDLE_LIMIT_MS) {   // 太久没动作 → 视为过期
+      session = { token:'', name:'', employeeId:'', role:'' };
+      clearSession();
+    } else {
+      lastActivity = Date.now();
+      saveSession();   // 刷新活动时间戳
+      document.getElementById('loginWrap').style.display = 'none';
+      document.getElementById('appWrap').style.display   = 'flex';
+      document.getElementById('topbarName').textContent  = `${session.name}（${session.employeeId}）`;
+      applyRolePermissions();
+      loadAllData();
+    }
   } catch (e) {
-    sessionStorage.removeItem('adminSession');
+    clearSession();
   }
 }
 
