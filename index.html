@@ -349,8 +349,8 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbymKvDkRyWPAMgm9YOh9h54
 
 // ─────────────────────────────────────────────
 
-// 备援科系清单（GAS 无法连线时使用）—— 需与「专业」分页同步，缺一个科系的学生就选不到自己专业
-const DEFAULT_DEPARTMENTS = ['国际商务','金融会计','创意设计','旅游管理','数位传媒'];
+// 备援科系清单（GAS 无法连线时使用）—— 需与线上「专业」分页同步（2026-09-01 更新为带代码的 7 系）
+const DEFAULT_DEPARTMENTS = ['IB 国际商务','FA 金融与会计','CD 创意设计','TM 旅游管理','CA 数字内容与媒体创作','IT 信息技术与人工智能','EV 现代汽车工程'];
 
 // 任何来自 Sheets 或使用者输入的字串，进 innerHTML 前一律跳脱，避免版面被引号撑破或储存型 XSS
 function esc(s) {
