@@ -536,6 +536,9 @@ async function doLogin() {
 }
 
 function doLogout() {
+  // 通知后端作废 session（共用电脑情境下，前端丢 token 不够，伺服器端也要失效）；不阻断登出流程
+  const oldToken = session && session.token;
+  if (oldToken) { try { api('POST', { action:'logout', token: oldToken }); } catch (e) {} }
   session = { token:'', name:'', employeeId:'', role:'' };
   sessionStorage.removeItem('adminSession');
   document.getElementById('loginWrap').style.display = 'flex';
@@ -811,7 +814,11 @@ function renderStudentsTable() {
   const val = v => (v !== '' && v !== null && v !== undefined) ? v : '—';
   const rows = pageStudents.map(s => {
     const st = studentStatus(s);
-    const badge = `<span class="badge ${st.cls}">${st.label}</span>`;
+    // 机考成绩有笔数缺日期时，入学/毕业推算可能不完整，挂一个提醒让管理员去补日期
+    const warn = (s.dateWarning===true||s.dateWarning==='TRUE')
+      ? ' <span class="badge badge-yellow" title="有机考成绩缺少或格式错误的测验日期，入学/毕业推算可能不完整，请到「机考成绩」分页补正日期">⚠ 日期缺失</span>'
+      : '';
+    const badge = `<span class="badge ${st.cls}">${st.label}</span>${warn}`;
     const d = s.lastExamDate ? new Date(s.lastExamDate).toLocaleDateString('zh-CN') : '—';
     return `<tr>
       <td>${esc(s.studentId)}</td><td>${esc(s.name)}</td><td>${esc(val(s.dept))}</td>
@@ -1034,7 +1041,7 @@ function exportStudentsXLSX() {
     '毕业考分数'  : tf(s.secondScore),
     '毕业考日期'  : tf(s.secondDate),
     // 与画面徽章同源，五态一致；旧版只有「待院考／通过」两态，会把没考的人也标成「通过」
-    '状态'        : studentStatus(s).label,
+    '状态'        : studentStatus(s).label + ((s.dateWarning===true||s.dateWarning==='TRUE') ? '（日期缺失，请补机考测验日期）' : ''),
     '院考最高分'  : tf(s.bestScore),
     '院考通过'    : yn(s.passed),
     '最后考试日期': tf(s.lastExamDate)

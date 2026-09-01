@@ -193,6 +193,25 @@
     display: flex; gap: 10px; justify-content: space-between; margin-top: 20px;
   }
 
+  /* ── 题号总览（跳题检查）── */
+  .nav-toggle {
+    width: 100%; margin-top: 12px; background: transparent;
+    border: 1.5px solid var(--gray-200); color: var(--gray-700);
+    border-radius: 8px; padding: 10px; font-size: .9rem; font-weight: 600; cursor: pointer;
+  }
+  .nav-toggle:hover { background: var(--gray-50); }
+  .nav-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(34px, 1fr));
+    gap: 6px; margin-top: 10px;
+  }
+  .nav-cell {
+    padding: 8px 0; border: 1.5px solid var(--gray-200); border-radius: 8px;
+    background: #fff; font-size: .82rem; color: var(--gray-700); cursor: pointer;
+  }
+  .nav-cell.done { background: var(--primary-50); border-color: var(--primary-100); color: var(--primary-dark); font-weight: 700; }
+  .nav-cell.cur  { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 700; }
+  .nav-legend { font-size: .75rem; color: var(--gray-600); margin-top: 8px; text-align: center; }
+
   .progress-bar-wrap {
     background: var(--gray-200); border-radius: 99px; height: 6px; margin-bottom: 6px;
   }
@@ -241,22 +260,22 @@
 <!-- ①登录 -->
 <div class="card screen active" id="loginScreen">
   <h2>学生考试登记</h2>
-  <div id="loginError" class="alert alert-error" style="display:none"></div>
-  <div id="examStatusAlert" class="alert" style="display:none"></div>
+  <div id="loginError" class="alert alert-error" role="alert" style="display:none"></div>
+  <div id="examStatusAlert" class="alert" role="alert" style="display:none"></div>
   <div class="form-group">
-    <label>学号</label>
+    <label for="studentIdInput">学号</label>
     <input type="text" id="studentIdInput" placeholder="请输入学号" autocomplete="off">
   </div>
   <div class="form-group">
-    <label>姓名</label>
+    <label for="studentNameInput">姓名</label>
     <input type="text" id="studentNameInput" placeholder="请输入姓名" autocomplete="off">
   </div>
   <div class="form-group">
-    <label>科系</label>
+    <label for="studentDeptInput">科系</label>
     <select id="studentDeptInput"></select>
   </div>
   <div class="form-group" id="examPwGroup" style="display:none">
-    <label>考场密码</label>
+    <label for="examPwInput">考场密码</label>
     <input type="text" id="examPwInput" placeholder="请向监考老师索取" autocomplete="off">
   </div>
   <button class="btn btn-primary" id="loginBtn" onclick="handleLogin()">开始考试</button>
@@ -274,7 +293,7 @@
       </div>
       <div class="exam-progress" id="progressText">第 1 题，共 50 题</div>
     </div>
-    <div class="timer" id="timer">60:00</div>
+    <div class="timer" id="timer" role="timer" aria-live="polite" aria-label="剩余时间">60:00</div>
   </div>
 
   <div id="questionContainer"></div>
@@ -283,10 +302,15 @@
     <button class="btn btn-outline" id="prevBtn" onclick="navigate(-1)">← 上一题</button>
     <button class="btn btn-outline" id="nextBtn" onclick="navigate(1)">下一题 →</button>
   </div>
+
+  <!-- 题号总览：一眼看出哪几题没答、点数字直接跳过去检查 -->
+  <button class="nav-toggle" id="navToggle" onclick="toggleNav()" aria-expanded="false" aria-controls="navGrid">📋 题号总览（已答 0/50）</button>
+  <div id="navGrid" class="nav-grid" style="display:none"></div>
+  <div id="navLegend" class="nav-legend" style="display:none">紫底＝已作答，白底＝未作答；点数字可直接跳到该题</div>
   <button class="btn btn-primary" id="submitBtn"
     style="margin-top:12px;background:var(--success);display:none"
     onclick="handleSubmit()">交卷</button>
-  <p id="unansweredWarning"
+  <p id="unansweredWarning" role="alert"
     style="color:var(--danger);font-size:.83rem;margin-top:8px;text-align:center;display:none">
     还有未作答的题目，确定要交卷吗？
   </p>
@@ -422,6 +446,13 @@ function resetSubmitBtn() {
   const warn = document.getElementById('unansweredWarning');
   warn.onclick = null;
   warn.style.display = 'none';
+  // 题号总览收起复位（避免上一场残留展开状态）
+  const grid = document.getElementById('navGrid');
+  const legend = document.getElementById('navLegend');
+  const navToggle = document.getElementById('navToggle');
+  if (grid)   grid.style.display = 'none';
+  if (legend) legend.style.display = 'none';
+  if (navToggle) navToggle.setAttribute('aria-expanded', 'false');
 }
 
 function onEnterLogin(e) {
@@ -462,6 +493,7 @@ function renderQuestion() {
   document.getElementById('nextBtn').style.display    = currentIdx < questions.length - 1 ? '' : 'none';
   document.getElementById('submitBtn').style.display  = currentIdx === questions.length - 1 ? '' : 'none';
   document.getElementById('unansweredWarning').style.display = 'none';
+  renderNavigator();   // 更新「已答 X/50」与格子高亮
 }
 
 function selectAnswer(qid, key, el) {
@@ -470,12 +502,42 @@ function selectAnswer(qid, key, el) {
   document.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
   el.closest('.option')?.classList.add('selected');
   saveExamState();
+  renderNavigator();   // 作答后即时更新总览的已答数与颜色
 }
 
 function navigate(dir) {
   currentIdx = Math.max(0, Math.min(questions.length - 1, currentIdx + dir));
   renderQuestion();
   saveExamState();
+}
+
+// ── 题号总览（跳题检查）──
+function toggleNav() {
+  const grid   = document.getElementById('navGrid');
+  const legend = document.getElementById('navLegend');
+  const open   = grid.style.display !== 'none';
+  grid.style.display   = open ? 'none' : 'grid';
+  legend.style.display = open ? 'none' : 'block';
+  document.getElementById('navToggle').setAttribute('aria-expanded', String(!open));
+  if (!open) renderNavigator();
+}
+
+function jumpTo(i) {
+  currentIdx = Math.max(0, Math.min(questions.length - 1, i));
+  renderQuestion();
+  saveExamState();
+}
+
+function renderNavigator() {
+  const answered = questions.filter(q => answers[q.questionId]).length;
+  const toggle = document.getElementById('navToggle');
+  if (toggle) toggle.textContent = `📋 题号总览（已答 ${answered}/${questions.length}）`;
+  const grid = document.getElementById('navGrid');
+  if (!grid || grid.style.display === 'none') return;   // 收起时不必重建
+  grid.innerHTML = questions.map((q, i) => {
+    const cls = 'nav-cell' + (i === currentIdx ? ' cur' : (answers[q.questionId] ? ' done' : ''));
+    return `<button type="button" class="${cls}" onclick="jumpTo(${i})" aria-label="第 ${i + 1} 题${answers[q.questionId] ? '，已作答' : '，未作答'}">${i + 1}</button>`;
+  }).join('');
 }
 
 // ── 计时器 ──
