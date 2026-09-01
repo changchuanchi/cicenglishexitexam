@@ -44,19 +44,25 @@
   .logo {
     text-align: center;
     margin-bottom: 28px;
+    /* body 是 flex + align-items:center，.logo 会被撑成内容的 max-content 宽度；
+       没有这行的话，入口按钮一多就会把整页撑宽、标题与按钮被切掉（三颗时实测溢出）*/
+    max-width: 100%;
   }
   .logo h1 { font-size: 1.6rem; font-weight: 700; color: var(--primary-dark); letter-spacing: -.01em; }
   .logo p  { font-size: .9rem; color: var(--gray-600); margin-top: 4px; }
 
-  /* 标题下方的两颗入口按钮 */
+  /* 标题下方的入口按钮：用 flex 换行，窄萤幕会自动折行并保持置中 */
+  .chip-row {
+    display: flex; flex-wrap: wrap; justify-content: center;
+    gap: 8px; margin-top: 12px;
+  }
   .chip-link {
-    display: inline-block; margin-top: 12px; padding: 6px 16px;
+    display: inline-block; padding: 6px 16px;
     font-size: .85rem; font-weight: 500; text-decoration: none;
     color: var(--primary-dark); background: rgba(255,255,255,.7);
     border: 1.5px solid var(--primary-100); border-radius: 99px;
     transition: all .18s;
   }
-  .chip-link + .chip-link { margin-left: 8px; }
   .chip-link:hover {
     background: #fff; border-color: var(--primary);
     color: var(--primary); transform: translateY(-1px);
@@ -223,11 +229,15 @@
   <img src="dpu%20logo.png" alt="DPU Logo" style="height:64px;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto;">
   <h1>博仁大学中文国际学院英文毕业考试系统</h1>
 
-  <a href="admin.html" class="chip-link">管理员入口</a>
-
-  <a href="https://changchuanchi.github.io/ciclearninghub/cicenglishexitexam_testbank.html"
-     target="_blank" rel="noopener"
-     class="chip-link">题库练习</a>
+  <!-- 三颗入口一律 target="_blank"：这块 LOGO 区在考试进行中也看得到，
+       若在同分页开启，学生误触就会离开考试页、已作答内容全部消失 -->
+  <div class="chip-row">
+    <a href="guide.html" target="_blank" rel="noopener" class="chip-link">考试说明</a>
+    <a href="admin.html" target="_blank" rel="noopener" class="chip-link">管理员入口</a>
+    <a href="https://changchuanchi.github.io/ciclearninghub/cicenglishexitexam_testbank.html"
+       target="_blank" rel="noopener"
+       class="chip-link">题库练习</a>
+  </div>
 </div>
 
 <!-- ①登录 -->
