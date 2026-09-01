@@ -501,11 +501,26 @@ async function submitExamData() {
       answers,
       timeTaken
     });
-    if (!res.success) { alert(res.error || '提交失败'); btn.disabled = false; return; }
+    if (!res.success) {
+      alert(res.error || '提交失败');
+      restoreSubmitBtn(btn);
+      return;
+    }
     showResult(res);
   } catch (e) {
-    alert('连线失败，请稍后再试'); btn.disabled = false;
+    alert(e && e.name === 'AbortError'
+      ? '提交逾时，答案未送出，请再按一次「交卷」重试'
+      : '连线失败，答案未送出，请再按一次「交卷」重试');
+    restoreSubmitBtn(btn);
   }
+}
+
+// 交卷失败后复原按钮：时间到自动交卷时学生可能不在最后一题，按钮是隐藏的，须强制显示才能重试
+function restoreSubmitBtn(btn) {
+  btn.disabled = false;
+  btn.textContent = '交卷';
+  btn.style.display = '';
+  btn.onclick = () => submitExamData();
 }
 
 function showResult(res) {
@@ -534,17 +549,25 @@ function logout() {
 }
 
 // ── API 工具 ──
-async function api(method, params) {
-  if (method === 'GET') {
-    const qs = new URLSearchParams(params).toString();
-    const r  = await fetch(`${GAS_URL}?${qs}`);
-    return r.json();
-  } else {
-    const r = await fetch(GAS_URL, {
-      method : 'POST',
-      body   : JSON.stringify(params)
-    });
-    return r.json();
+// GAS 偶发挂起（实测交卷 POST 曾 >60 秒无回应），一律加逾时中断，让呼叫端能提示重试
+async function api(method, params, timeoutMs = 30000) {
+  const ctrl  = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    let r;
+    if (method === 'GET') {
+      const qs = new URLSearchParams(params).toString();
+      r = await fetch(`${GAS_URL}?${qs}`, { signal: ctrl.signal });
+    } else {
+      r = await fetch(GAS_URL, {
+        method : 'POST',
+        body   : JSON.stringify(params),
+        signal : ctrl.signal
+      });
+    }
+    return await r.json();
+  } finally {
+    clearTimeout(timer);
   }
 }
 
