@@ -325,13 +325,20 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbymKvDkRyWPAMgm9YOh9h54
 
 // ─────────────────────────────────────────────
 
-// 备援科系清单（GAS 无法连线时使用）
-const DEFAULT_DEPARTMENTS = ['国际商务','金融会计','创意设计','旅游管理'];
+// 备援科系清单（GAS 无法连线时使用）—— 需与「专业」分页同步，缺一个科系的学生就选不到自己专业
+const DEFAULT_DEPARTMENTS = ['国际商务','金融会计','创意设计','旅游管理','数位传媒'];
+
+// 任何来自 Sheets 或使用者输入的字串，进 innerHTML 前一律跳脱，避免版面被引号撑破或储存型 XSS
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 
 function fillDeptSelect(depts) {
   const sel = document.getElementById('studentDeptInput');
   sel.innerHTML = '<option value="">-- 请选择专业 --</option>' +
-    depts.map(d => `<option value="${d}">${d}</option>`).join('');
+    depts.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
 }
 
 async function loadDepartments() {
@@ -352,6 +359,7 @@ let examToken      = '';   // 发题时由后端配发，交卷时带回验证
 let questions      = [];
 let answers        = {};
 let currentIdx     = 0;
+let examEnded      = false;   // 时间到之后锁定作答，避免逾时又交卷失败时继续改答案
 let timerInterval  = null;
 const EXAM_SECONDS = 60 * 60;
 let examDeadline   = 0;            // 交卷时刻（epoch 毫秒），倒数一律以此回推
@@ -379,17 +387,24 @@ async function handleLogin() {
 
   try {
     const examPw = document.getElementById('examPwInput').value.trim();
-    const res = await api('GET', { action: 'getQuestions', password: examPw });
+    const res = await api('GET', { action: 'getQuestions', password: examPw, studentId: id });
     if (!res.success) { showError('loginError', res.error || '无法获取题目'); return; }
+    if (!Array.isArray(res.questions) || !res.questions.length) {
+      showError('loginError', '题库为空或数据异常，请联系监考老师');
+      return;
+    }
 
     currentStudent = { studentId: id, name, dept };
     examToken   = res.examToken || '';
     questions   = res.questions;
     answers     = {};
     currentIdx  = 0;
+    examEnded   = false;
     secondsLeft = EXAM_SECONDS;
+    resetSubmitBtn();            // 同一分页连考第二场时，把上一场残留的「提交中…」按钮状态复原
     renderQuestion();
     startTimer();
+    saveExamState();
     showScreen('examScreen');
   } catch (e) {
     showError('loginError', '连线失败，请稍后再试');
@@ -398,12 +413,26 @@ async function handleLogin() {
   }
 }
 
+// 把交卷按钮与未作答提醒复原成开考前的初始状态（避免上一场的 disabled／改写过的 onclick 卡住下一场）
+function resetSubmitBtn() {
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = false;
+  btn.textContent = '交卷';
+  btn.onclick = handleSubmit;
+  const warn = document.getElementById('unansweredWarning');
+  warn.onclick = null;
+  warn.style.display = 'none';
+}
+
+function onEnterLogin(e) {
+  // 只有按钮可按时才触发（考试未开放或加载中，按钮为 disabled，Enter 也不应发请求）
+  if (e.key === 'Enter' && !document.getElementById('loginBtn').disabled) handleLogin();
+}
 document.getElementById('studentIdInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('studentNameInput').focus();
 });
-document.getElementById('studentNameInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') handleLogin();
-});
+document.getElementById('studentNameInput').addEventListener('keydown', onEnterLogin);
+document.getElementById('examPwInput').addEventListener('keydown', onEnterLogin);
 
 // ── 题目渲染 ──
 function renderQuestion() {
@@ -417,13 +446,13 @@ function renderQuestion() {
   document.getElementById('questionContainer').innerHTML = `
     <div class="question-card">
       <div class="question-text">
-        <span class="question-num">${num}</span>${q.text}
+        <span class="question-num">${num}</span>${esc(q.text)}
       </div>
       <div class="options">
         ${q.options.map(opt => `
-          <label class="option ${sel === opt.key ? 'selected' : ''}" onclick="selectAnswer('${q.questionId}','${opt.key}',this)">
-            <input type="radio" name="q${q.questionId}" value="${opt.key}" ${sel === opt.key ? 'checked' : ''}>
-            <span><strong>${opt.key}.</strong> ${opt.text}</span>
+          <label class="option ${sel === opt.key ? 'selected' : ''}" onclick="selectAnswer('${esc(q.questionId)}','${esc(opt.key)}',this)">
+            <input type="radio" name="q${esc(q.questionId)}" value="${esc(opt.key)}" ${sel === opt.key ? 'checked' : ''}>
+            <span><strong>${esc(opt.key)}.</strong> ${esc(opt.text)}</span>
           </label>
         `).join('')}
       </div>
@@ -436,23 +465,27 @@ function renderQuestion() {
 }
 
 function selectAnswer(qid, key, el) {
+  if (examEnded) return;   // 时间已到，锁定作答（仅允许重试交卷）
   answers[qid] = key;
   document.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
   el.closest('.option')?.classList.add('selected');
+  saveExamState();
 }
 
 function navigate(dir) {
   currentIdx = Math.max(0, Math.min(questions.length - 1, currentIdx + dir));
   renderQuestion();
+  saveExamState();
 }
 
 // ── 计时器 ──
 // 以「截止时刻」回推剩余秒数，而非每秒递减计数。
 // 递减写法在分页切到背景、手机锁屏时会被浏览器节流甚至暂停，
 // 学生切出去多久就等于多赚多久，实际可作答时间会超过 60 分钟。
-function startTimer() {
+function startTimer(deadline) {
   clearInterval(timerInterval);
-  examDeadline = Date.now() + EXAM_SECONDS * 1000;
+  // 刷新／误关后复原考试时，沿用原本的截止时刻，不重新给满 60 分钟
+  examDeadline = deadline || (Date.now() + EXAM_SECONDS * 1000);
   tickTimer();                                   // 立即更新一次，不必等第一秒
   timerInterval = setInterval(tickTimer, 1000);
   // 从背景切回来时立刻补上真实经过的时间，不等下一次 tick
@@ -470,7 +503,7 @@ function tickTimer() {
     el.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
     el.className = 'timer' + (secondsLeft <= 300 ? ' danger' : secondsLeft <= 600 ? ' warning' : '');
   }
-  if (secondsLeft <= 0) { stopTimer(); submitExamData(); }
+  if (secondsLeft <= 0) { examEnded = true; stopTimer(); submitExamData(); }
 }
 
 function stopTimer() {
@@ -531,7 +564,52 @@ function restoreSubmitBtn(btn) {
   btn.onclick = () => submitExamData();
 }
 
+// ── 作答暂存（防刷新／误关全失）──────────────────
+// 考试进行中把状态写入 sessionStorage；页面重新载入时若暂存未过期即自动复原。
+// 用 sessionStorage 而非 localStorage：关掉分页即清除，不会把答案留在共用电脑上。
+const EXAM_STATE_KEY = 'cic_exam_state';
+
+function saveExamState() {
+  try {
+    sessionStorage.setItem(EXAM_STATE_KEY, JSON.stringify({
+      currentStudent, examToken, questions, answers, currentIdx, examDeadline
+    }));
+  } catch (e) { /* 隐私模式或容量满：不阻断考试 */ }
+}
+
+function clearExamState() {
+  try { sessionStorage.removeItem(EXAM_STATE_KEY); } catch (e) {}
+}
+
+function restoreExamState() {
+  let s;
+  try { s = JSON.parse(sessionStorage.getItem(EXAM_STATE_KEY) || 'null'); } catch (e) { s = null; }
+  if (!s || !s.examDeadline || !Array.isArray(s.questions) || !s.questions.length) return false;
+  if (Date.now() >= s.examDeadline) { clearExamState(); return false; }  // 已逾时，不复原
+  currentStudent = s.currentStudent;
+  examToken      = s.examToken || '';
+  questions      = s.questions;
+  answers        = s.answers || {};
+  currentIdx     = Math.min(s.currentIdx || 0, questions.length - 1);
+  examEnded      = false;
+  resetSubmitBtn();
+  renderQuestion();
+  startTimer(s.examDeadline);   // 沿用原截止时刻
+  showScreen('examScreen');
+  return true;
+}
+
+// 考试进行中误关／刷新前拦一道浏览器原生确认
+window.addEventListener('beforeunload', e => {
+  if (document.getElementById('examScreen').classList.contains('active')) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+
 function showResult(res) {
+  clearExamState();
+  examToken = ''; answers = {};   // 交卷成功即清理凭证与答案，结果画面不留残state
   const circle = document.getElementById('scoreCircle');
   circle.className = 'score-circle ' + (res.passed ? 'pass' : 'fail');
   document.getElementById('scoreNum').textContent = res.score;
@@ -545,10 +623,12 @@ function showResult(res) {
 }
 
 function logout() {
+  clearExamState();
   currentStudent = null;
   examToken = '';
   questions = []; answers = {}; currentIdx = 0;
   stopTimer();
+  resetSubmitBtn();
   document.getElementById('studentIdInput').value = '';
   document.getElementById('studentNameInput').value = '';
   document.getElementById('studentDeptInput').value = '';
@@ -605,9 +685,10 @@ async function loadExamStatus() {
   }
 }
 
-// 页面载入时读取专业清单与考试状态
+// 页面载入时读取专业清单与考试状态；若侦测到未过期的作答暂存则直接复原考试
 loadDepartments();
 loadExamStatus();
+restoreExamState();
 </script>
 </body>
 </html>

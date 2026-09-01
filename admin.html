@@ -339,11 +339,13 @@
     <div class="panel" id="panel-export">
       <div class="card">
         <div class="card-title">导出数据</div>
+        <div id="exportAlert"></div>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
           <button class="btn btn-primary" onclick="exportStudentsXLSX()">导出学生清单 (.xlsx)</button>
           <button class="btn btn-outline" onclick="exportRecordsXLSX()">导出考试记录 (.xlsx)</button>
-          <button class="btn btn-outline" onclick="loadExport()">刷新统计</button>
+          <button class="btn btn-outline" onclick="loadExport(true)">刷新导出数据</button>
         </div>
+        <p style="font-size:.8rem;color:var(--gray-600);margin-top:10px">导出内容为登录（或上次刷新）时的快照；考试进行中如需最新数据，请先点「刷新导出数据」。</p>
       </div>
     </div>
 
@@ -521,6 +523,7 @@ async function doLogin() {
 
     session = { token: res.token, name: res.name, employeeId: res.employeeId, role: res.role };
     sessionStorage.setItem('adminSession', JSON.stringify(session));
+    _sessionExpiredHandled = false;
 
     document.getElementById('loginWrap').style.display = 'none';
     document.getElementById('appWrap').style.display   = 'flex';
@@ -533,7 +536,7 @@ async function doLogin() {
 }
 
 function doLogout() {
-  session = { token:'', name:'', employeeId:'' };
+  session = { token:'', name:'', employeeId:'', role:'' };
   sessionStorage.removeItem('adminSession');
   document.getElementById('loginWrap').style.display = 'flex';
   document.getElementById('appWrap').style.display   = 'none';
@@ -542,7 +545,16 @@ function doLogout() {
   document.getElementById('loginAlert').style.display = 'none';
 }
 
-function loadAllData() { loadStudents(); loadQuestions(); loadExport(); loadAdmins(); loadExamConfig(); }
+// viewer 只读学生总览与导出；题库、账号、考试设置一律不打（后端也各自挡角色，前后端一致）
+function loadAllData() {
+  loadStudents();
+  loadExport();
+  if (session.role !== 'viewer') {
+    loadQuestions();
+    loadAdmins();
+    loadExamConfig();
+  }
+}
 
 // ── 考试控制 ──
 async function loadExamConfig() {
@@ -589,6 +601,7 @@ function openSetExamPasswordModal() {
 
 async function submitSetExamPassword() {
   const pw = document.getElementById('examPwField').value.trim();
+  if (!guard('setExamPw')) return;
   try {
     const res = await api('POST', { action: 'setExamConfig', token: session.token, password: pw });
     if (res.success) {
@@ -597,6 +610,7 @@ async function submitSetExamPassword() {
       closeModal('setExamPasswordModal');
     } else showEl('setExamPwAlert', res.error || '保存失败', 'error');
   } catch { showEl('setExamPwAlert', '连线失败', 'error'); }
+  finally { unguard('setExamPw'); }
 }
 
 // ── 修改密码（首次登录）──
@@ -631,6 +645,7 @@ function submitChangePassword() {
 
 async function changePassword(alertId, oldPw, newPw, onSuccess) {
   if (!newPw || newPw.length < 6) { showEl(alertId, '新密码至少 6 个字符', 'error'); return; }
+  if (!guard('changePassword')) return;
   try {
     const res = await api('POST', {
       action:'changePassword', token: session.token,
@@ -639,6 +654,7 @@ async function changePassword(alertId, oldPw, newPw, onSuccess) {
     if (res.success) onSuccess();
     else showEl(alertId, res.error || '修改失败', 'error');
   } catch { showEl(alertId, '连线失败', 'error'); }
+  finally { unguard('changePassword'); }
 }
 
 // ── Tab ──
@@ -975,11 +991,13 @@ async function saveQuestion() {
   if (!q.text||!q.optionA||!q.optionB||!q.optionC||!q.optionD) {
     showEl('qModalAlert','请填写所有栏位','error'); return;
   }
+  if (!guard('saveQuestion')) return;   // 防双击重复新增
   try {
     const res = await api('POST', { action: id ? 'updateQuestion':'addQuestion', token: session.token, question: q });
     if (res.success) { closeModal('questionModal'); loadQuestions(); }
     else showEl('qModalAlert', res.error||'保存失败', 'error');
   } catch { showEl('qModalAlert','连线失败','error'); }
+  finally { unguard('saveQuestion'); }
 }
 
 async function deleteQuestion(questionId) {
@@ -994,17 +1012,17 @@ async function deleteQuestion(questionId) {
 // ════════════════════════════════════════════════
 // ④ 导出报表
 // ════════════════════════════════════════════════
-async function loadExport() {
+async function loadExport(showToast) {
   try {
     const res = await api('GET', { action:'exportReport', token: session.token });
     if (!res.success) return;
     exportCache = res;
-    const s = res.summary;
+    if (showToast) showEl('exportAlert', '导出数据已更新', 'success');
   } catch {}
 }
 
 function exportStudentsXLSX() {
-  if (!exportCache) return;
+  if (!exportCache) { alert('导出数据尚未载入，请先点「刷新导出数据」或稍候再试'); return; }
   const tf = v => (v !== '' && v !== null && v !== undefined) ? v : '';
   const yn = v => (v === true || v === 'TRUE') ? '是' : '否';
   downloadXLSX(exportCache.students.map(s => ({
@@ -1015,7 +1033,8 @@ function exportStudentsXLSX() {
     '入学考日期'  : tf(s.firstDate),
     '毕业考分数'  : tf(s.secondScore),
     '毕业考日期'  : tf(s.secondDate),
-    '状态'        : (s.needExam === true || s.needExam === 'TRUE') ? '待院考' : '通过',
+    // 与画面徽章同源，五态一致；旧版只有「待院考／通过」两态，会把没考的人也标成「通过」
+    '状态'        : studentStatus(s).label,
     '院考最高分'  : tf(s.bestScore),
     '院考通过'    : yn(s.passed),
     '最后考试日期': tf(s.lastExamDate)
@@ -1023,14 +1042,16 @@ function exportStudentsXLSX() {
 }
 
 function exportRecordsXLSX() {
-  if (!exportCache) return;
+  if (!exportCache) { alert('导出数据尚未载入，请先点「刷新导出数据」或稍候再试'); return; }
+  const yn = v => (v === true || v === 'TRUE') ? '是' : '否';   // 布林可能被序列化成字串 'TRUE'
   downloadXLSX(exportCache.records.map(r => ({
     '考试ID':r['考试ID'],'学号':r['学号'],'考试时间':r['考试时间'],
-    '得分':r['得分'],'通过':r['通过']?'是':'否','作答时间(秒)':r['作答时间(秒)']
+    '得分':r['得分'],'通过':yn(r['通过']),'作答时间(秒)':r['作答时间(秒)']
   })), '考试记录');
 }
 
 function downloadXLSX(data, filename) {
+  if (typeof XLSX === 'undefined') { alert('导出元件载入失败，请重新整理页面或检查网络后再试'); return; }
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, filename);
@@ -1085,11 +1106,13 @@ async function submitAddAdmin() {
   const empId = document.getElementById('newEmpId').value.trim();
   const name  = document.getElementById('newAdminName').value.trim();
   if (!empId||!name) { showEl('addAdminAlert','员工号与姓名为必填','error'); return; }
+  if (!guard('addAdmin')) return;   // 防双击重复建立
   try {
     const res = await api('POST', { action:'addAdmin', token: session.token, admin:{ employeeId:empId, name } });
     if (res.success) { closeModal('addAdminModal'); loadAdmins(); }
     else showEl('addAdminAlert', res.error||'建立失败','error');
   } catch { showEl('addAdminAlert','连线失败','error'); }
+  finally { unguard('addAdmin'); }
 }
 
 async function resetPassword(idx) {
@@ -1114,14 +1137,41 @@ function esc(v) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-async function api(method, params) {
-  if (method === 'GET') {
-    const r = await fetch(`${GAS_URL}?${new URLSearchParams(params)}`);
-    return r.json();
+// GAS 偶发挂起：一律加 30 秒逾时中断，否则按钮会永远停在「验证中…／加载中…」
+async function api(method, params, timeoutMs = 30000) {
+  const ctrl  = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    let r;
+    if (method === 'GET') {
+      r = await fetch(`${GAS_URL}?${new URLSearchParams(params)}`, { signal: ctrl.signal });
+    } else {
+      r = await fetch(GAS_URL, { method:'POST', body: JSON.stringify(params), signal: ctrl.signal });
+    }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    // Session 过期／未登录：集中处理，强制回到登录画面（各呼叫端就不必各自判断）
+    if (data && data.success === false && /Session 已过期|未登录/.test(data.error || '')) {
+      onSessionExpired();
+    }
+    return data;
+  } finally {
+    clearTimeout(timer);
   }
-  const r = await fetch(GAS_URL, { method:'POST', body: JSON.stringify(params) });
-  return r.json();
 }
+
+let _sessionExpiredHandled = false;
+function onSessionExpired() {
+  if (_sessionExpiredHandled) return;   // loadAllData 会并行多打，只处理一次
+  _sessionExpiredHandled = true;
+  doLogout();
+  showEl('loginAlert', '登录已过期，请重新登录', 'error');
+}
+
+// 防止写入操作被双击重复提交（GAS 会并行执行，重按两下就产生两笔）
+const _inflight = {};
+function guard(key)   { if (_inflight[key]) return false; _inflight[key] = true; return true; }
+function unguard(key) { _inflight[key] = false; }
 
 function showEl(id, msg, type) {
   const el = document.getElementById(id);
@@ -1134,6 +1184,13 @@ function showEl(id, msg, type) {
 
 // ── 角色权限控制 ──
 function applyRolePermissions() {
+  // 先一律复原成全权限 UI —— 否则「viewer 登出→admin 同分页登入」时被隐藏的分页与考试卡不会回来
+  document.getElementById('examControlCard').style.display = '';
+  ['questions', 'accounts'].forEach(tab => {
+    const el = document.querySelector(`[data-tab="${tab}"]`);
+    if (el) el.style.display = '';
+  });
+
   if (session.role !== 'viewer') return; // 只有明确为 viewer 才限制，undefined/admin 均为全权限
 
   // viewer：隐藏写入功能分页与考试控制
@@ -1155,15 +1212,20 @@ function applyRolePermissions() {
   if (nameEl) nameEl.textContent += '（检视者）';
 }
 
-// 恢复 session（若同一页刷新）
+// 恢复 session（若同一页刷新）—— 坏掉的暂存要清掉退回登录，否则每次载入都炸
 const saved = sessionStorage.getItem('adminSession');
 if (saved) {
-  session = JSON.parse(saved);
-  document.getElementById('loginWrap').style.display = 'none';
-  document.getElementById('appWrap').style.display   = 'flex';
-  document.getElementById('topbarName').textContent  = `${session.name}（${session.employeeId}）`;
-  applyRolePermissions();
-  loadAllData();
+  try {
+    session = JSON.parse(saved);
+    if (!session || !session.token) throw new Error('no token');
+    document.getElementById('loginWrap').style.display = 'none';
+    document.getElementById('appWrap').style.display   = 'flex';
+    document.getElementById('topbarName').textContent  = `${session.name}（${session.employeeId}）`;
+    applyRolePermissions();
+    loadAllData();
+  } catch (e) {
+    sessionStorage.removeItem('adminSession');
+  }
 }
 </script>
 </body>
