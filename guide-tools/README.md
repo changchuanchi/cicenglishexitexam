@@ -40,3 +40,8 @@ loadExamStatus();
   列印与截图时图片空白。
 - 阶段清单、模拟题目、说明文字都写在脚本里，要增删阶段直接改 `shoot.js` 的
   `STAGES` 与 `build-guide.js` 的版面模板。
+- **页面之间一律用相对路径**：`build-guide.js` 产出的「题库练习」按钮连到
+  `testbank.html`（同一个 repo 的同层档案）。四个页面同处 `cicenglishexitexam`，
+  不要在模板里写绝对网址。
+- **改了 `build-guide.js` 记得重传**：这个资料夹本身也在 repo 里，只改本机不上传，
+  线上那份产生器就会跟本机不一致（实际发生过）。
