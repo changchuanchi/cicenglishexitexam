@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>博仁大学中文国际学院英语毕业考试管理员后台</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- SheetJS 自我托管（与页面同 repo）：不依赖外部 CDN —— 避免 CDN 被污染时在后台执行任意码，也避免 cdnjs 在部分地区被挡导致导出失效 -->
+<script src="xlsx.full.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
