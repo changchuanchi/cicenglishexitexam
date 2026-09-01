@@ -295,18 +295,40 @@
   </div>
 
   <div class="tabs">
-    <div class="tab active" data-tab="students"  onclick="switchTab(this,'students')">学生总览</div>
+    <div class="tab active" data-tab="dashboard" onclick="switchTab(this,'dashboard')">仪表板</div>
+    <div class="tab"        data-tab="students"  onclick="switchTab(this,'students')">学生总览</div>
     <div class="tab"        data-tab="live"      onclick="switchTab(this,'live')">本场监考</div>
     <div class="tab"        data-tab="questions" onclick="switchTab(this,'questions')">题库管理</div>
     <div class="tab"        data-tab="analysis"  onclick="switchTab(this,'analysis')">试题分析</div>
     <div class="tab"        data-tab="export"    onclick="switchTab(this,'export')">导出报表</div>
     <div class="tab"        data-tab="accounts"  onclick="switchTab(this,'accounts')">账号管理</div>
+    <div class="tab"        data-tab="adminlog"  onclick="switchTab(this,'adminlog')">操作日志</div>
   </div>
 
   <div class="content">
 
+    <!-- ⓪ 仪表板（登入后首页）-->
+    <div class="panel active" id="panel-dashboard">
+      <div class="card">
+        <div class="search-bar">
+          <div class="card-title">总览仪表板</div>
+          <span id="dashHint" style="font-size:.8rem;color:var(--gray-500);white-space:nowrap">本学期状态一览（已排除 9999 开头的测试资料）</span>
+          <button class="btn btn-outline" onclick="loadStudents();loadExport(true)">刷新</button>
+        </div>
+        <div class="stats-grid" id="dashStats"></div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:12px">各科系达标情况</div>
+        <div id="dashDept"><p style="color:var(--gray-500);font-size:.88rem">加载中…</p></div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:12px">院考场次（按日期）</div>
+        <div class="table-wrap" id="dashSessions"><p style="color:var(--gray-500);font-size:.88rem">加载中…</p></div>
+      </div>
+    </div>
+
     <!-- ① 学生总览 -->
-    <div class="panel active" id="panel-students">
+    <div class="panel" id="panel-students">
       <div class="card" id="examControlCard">
         <div class="card-title" style="margin-bottom:12px">考试控制</div>
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
@@ -403,6 +425,20 @@
         <p style="margin-top:12px;font-size:.82rem;color:var(--gray-500)">
           预设密码由系统管理员设置于 GAS 程序码中（<code>DEFAULT_PASSWORD</code>）。重设密码后使用者可用预设密码登录，并自行修改。
         </p>
+      </div>
+    </div>
+
+    <!-- 操作日志 -->
+    <div class="panel" id="panel-adminlog">
+      <div class="card">
+        <div class="search-bar">
+          <div class="card-title">操作日志</div>
+          <span id="adminlogCount" style="font-size:.82rem;color:var(--gray-500);white-space:nowrap"></span>
+          <button class="btn btn-outline" onclick="loadAdminLog()">刷新</button>
+        </div>
+        <p style="font-size:.78rem;color:var(--gray-500);margin:-4px 0 12px">记录后台的写入操作（登录、改题、开关考试、重置考试资格、新增/重设账号…），最新在前。</p>
+        <div id="adminlogAlert"></div>
+        <div class="table-wrap" id="adminlogTable"><p style="color:var(--gray-500);font-size:.88rem">点「刷新」载入操作日志…</p></div>
       </div>
     </div>
 
@@ -631,7 +667,7 @@ function doLogout() {
   const oldToken = session && session.token;
   if (oldToken) { try { api('POST', { action:'logout', token: oldToken }); } catch (e) {} }
   stopLiveAuto();
-  liveLoaded = false; analysisLoaded = false;   // 重新登录时再懒加载
+  liveLoaded = false; analysisLoaded = false; adminlogLoaded = false;   // 重新登录时再懒加载
   session = { token:'', name:'', employeeId:'', role:'' };
   clearSession();
   document.getElementById('loginWrap').style.display = 'flex';
@@ -761,8 +797,10 @@ function switchTab(el, name) {
   if (name !== 'live') stopLiveAuto();
   if (name === 'live'     && !liveLoaded)     { liveLoaded = true; loadLive(); }
   if (name === 'analysis' && !analysisLoaded) { analysisLoaded = true; loadAnalysis(); }
+  if (name === 'adminlog' && !adminlogLoaded) { adminlogLoaded = true; loadAdminLog(); }
+  if (name === 'dashboard') renderDashboard();   // 用已载入的 allStudents / exportCache 重算
 }
-let liveLoaded = false, analysisLoaded = false;
+let liveLoaded = false, analysisLoaded = false, adminlogLoaded = false;
 
 // ════════════════════════════════════════════════
 // 本场监考看板
@@ -933,6 +971,97 @@ function renderStudentDetail(res) {
 }
 function fmtDay(t){ if(!t) return ''; const d=new Date(t); return isNaN(d.getTime())?String(t):d.toLocaleDateString('zh-CN'); }
 
+// ════════════════════════════════════════════════
+// ⓪ 仪表板（用已载入的 allStudents ＋ exportCache 即时彙整，不另打 API）
+// ════════════════════════════════════════════════
+const isTestId = id => String(id || '').startsWith('9999');   // 9999 开头＝测试资料，统计一律排除
+
+function renderDashboard() {
+  const panel = document.getElementById('panel-dashboard');
+  if (!panel || !panel.classList.contains('active')) return;   // 不在仪表板就不算
+
+  // —— 关键数字（来自学生总览资料 allStudents，套用与徽章同源的 studentStatus）——
+  const real = (allStudents || []).filter(s => !isTestId(s.studentId));
+  const cnt = { total: real.length, passInstitute:0, passGrad:0, needExam:0, waitGrad:0, noScore:0 };
+  real.forEach(s => { const k = studentStatus(s).key; if (cnt[k] !== undefined) cnt[k]++; });
+  const done = cnt.passInstitute + cnt.passGrad;      // 已达标（院考通过 或 毕业考通过）
+  const rate = cnt.total ? Math.round(done / cnt.total * 1000) / 10 : 0;
+
+  if (!allStudents) {
+    document.getElementById('dashStats').innerHTML = '<p style="color:var(--gray-500);font-size:.88rem">学生资料加载中…</p>';
+  } else {
+    document.getElementById('dashStats').innerHTML = `
+      <div class="stat-card"><div class="stat-num">${cnt.total}</div><div class="stat-label">学生总数</div></div>
+      <div class="stat-card"><div class="stat-num">${done}</div><div class="stat-label">已达标（院考/毕业考通过）</div></div>
+      <div class="stat-card"><div class="stat-num">${rate}%</div><div class="stat-label">达标率</div></div>
+      <div class="stat-card"><div class="stat-num">${cnt.needExam}</div><div class="stat-label">待院考</div></div>
+      <div class="stat-card"><div class="stat-num">${cnt.waitGrad + cnt.noScore}</div><div class="stat-label">待毕业考/未有机考</div></div>`;
+  }
+
+  // —— 各科系达标情况（横条）——
+  const dept = {};
+  real.forEach(s => {
+    const d = s.dept || '（未填科系）';
+    const g = dept[d] = dept[d] || { total:0, done:0 };
+    g.total++;
+    const k = studentStatus(s).key;
+    if (k === 'passInstitute' || k === 'passGrad') g.done++;
+  });
+  const deptKeys = Object.keys(dept).sort((a,b)=> (dept[b].done/dept[b].total) - (dept[a].done/dept[a].total));
+  document.getElementById('dashDept').innerHTML = allStudents && deptKeys.length ? deptKeys.map(d => {
+    const g = dept[d]; const r = g.total ? Math.round(g.done/g.total*1000)/10 : 0;
+    return `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:.85rem;margin-bottom:3px">
+        <span>${esc(d)}</span><span style="color:var(--gray-500)">${g.done}/${g.total}　<strong style="color:var(--primary)">${r}%</strong></span>
+      </div>
+      <div class="bar-cell" style="height:16px;border-radius:6px;overflow:hidden;background:var(--gray-100)">
+        <div class="bar" style="width:${r}%;background:var(--primary);border-radius:6px"></div>
+      </div>
+    </div>`;
+  }).join('') : '<p style="color:var(--gray-500);font-size:.88rem">暂无资料</p>';
+
+  // —— 院考场次（按日期，来自 exportCache.records）——
+  const el = document.getElementById('dashSessions');
+  if (!exportCache) { el.innerHTML = '<p style="color:var(--gray-500);font-size:.88rem">考试记录加载中…（或点「刷新」）</p>'; return; }
+  const byDay = {};
+  (exportCache.records || []).forEach(r => {
+    if (isTestId(r['学号'])) return;
+    const t = r['考试时间']; const d = new Date(t);
+    const day = isNaN(d.getTime()) ? String(t) : d.toLocaleDateString('zh-CN');
+    const g = byDay[day] = byDay[day] || { n:0, sum:0, pass:0, ts: (isNaN(d.getTime())?0:d.getTime()) };
+    g.n++; g.sum += Number(r['得分']) || 0;
+    if (Number(r['得分']) >= 50) g.pass++;
+    g.ts = Math.max(g.ts, isNaN(d.getTime())?0:d.getTime());
+  });
+  const days = Object.keys(byDay).sort((a,b)=> byDay[b].ts - byDay[a].ts);
+  el.innerHTML = days.length ? `
+    <table><thead><tr><th>日期</th><th>考试人次</th><th>平均分</th><th>通过(≥50)</th><th>通过率</th></tr></thead>
+    <tbody>${days.map(d => { const g=byDay[d]; const avg=Math.round(g.sum/g.n*10)/10; const pr=Math.round(g.pass/g.n*1000)/10;
+      return `<tr><td>${esc(d)}</td><td>${g.n}</td><td>${avg}</td><td>${g.pass}</td><td><strong style="color:var(--primary)">${pr}%</strong></td></tr>`;
+    }).join('')}</tbody></table>`
+    : '<p style="color:var(--gray-500);font-size:.88rem">尚无院考记录</p>';
+}
+
+// ════════════════════════════════════════════════
+// 操作日志
+// ════════════════════════════════════════════════
+async function loadAdminLog() {
+  try {
+    const res = await api('GET', { action:'getAdminLog', token: session.token });
+    if (!res.success) { showEl('adminlogAlert', res.error || '加载失败', 'error'); return; }
+    document.getElementById('adminlogCount').textContent = `共 ${res.total} 笔，显示最近 ${res.logs.length} 笔`;
+    const rows = res.logs.map(l => `<tr>
+      <td style="white-space:nowrap">${esc(fmtTime(l.time))}</td>
+      <td>${esc(l.operation)}</td>
+      <td>${esc(l.operator)}</td>
+      <td style="max-width:360px;word-break:break-word">${esc(l.detail)}</td>
+    </tr>`).join('');
+    document.getElementById('adminlogTable').innerHTML = res.logs.length
+      ? `<table><thead><tr><th>时间</th><th>操作</th><th>操作者</th><th>详情</th></tr></thead><tbody>${rows}</tbody></table>`
+      : '<p style="color:var(--gray-500);font-size:.88rem">暂无日志</p>';
+  } catch { showEl('adminlogAlert', '连线失败', 'error'); }
+}
+
 // ── Modal ──
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 document.addEventListener('click', e => {
@@ -971,7 +1100,7 @@ function studentStatus(s) {
 async function loadStudents() {
   try {
     const res = await api('GET', { action:'getStudents', token: session.token });
-    if (res.success) { allStudents = res.students; studentPage = 1; refreshDeptFilter(); renderStudentsTable(); }
+    if (res.success) { allStudents = res.students; studentPage = 1; refreshDeptFilter(); renderStudentsTable(); renderDashboard(); }
     else showEl('studentsAlert', res.error, 'error');
   } catch { showEl('studentsAlert', '加载失败', 'error'); }
 }
@@ -1290,6 +1419,7 @@ async function loadExport(showToast) {
     const res = await api('GET', { action:'exportReport', token: session.token });
     if (!res.success) return;
     exportCache = res;
+    renderDashboard();
     if (showToast) showEl('exportAlert', '导出数据已更新', 'success');
   } catch {}
 }
@@ -1461,7 +1591,7 @@ function showEl(id, msg, type) {
 function applyRolePermissions() {
   // 先一律复原：所有分页与考试控制卡都显示（避免「上一位登出→这位登入同分页」时残留隐藏）
   document.getElementById('examControlCard').style.display = '';
-  ['live','questions','analysis','export','accounts'].forEach(tab => {
+  ['dashboard','students','live','questions','analysis','export','accounts','adminlog'].forEach(tab => {
     const el = document.querySelector(`[data-tab="${tab}"]`);
     if (el) el.style.display = '';
   });
