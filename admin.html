@@ -221,6 +221,13 @@
 
   .search-bar { display:flex; gap:10px; margin-bottom:16px; align-items:center; flex-wrap:wrap; }
   .search-bar input { max-width:360px; margin:0; }
+  .link { color:var(--primary); text-decoration:none; font-weight:600; cursor:pointer; }
+  .link:hover { text-decoration:underline; }
+  .kv { display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--gray-100); font-size:.9rem; }
+  .kv .k { color:var(--gray-500); }
+  .bar-cell { position:relative; min-width:120px; }
+  .bar-cell .bar { position:absolute; inset:0; background:var(--primary-50); border-radius:4px; z-index:0; }
+  .bar-cell .barlabel { position:relative; z-index:1; padding:2px 6px; }
 
   .stats-grid { grid-template-columns: repeat(4, 1fr); }
 
@@ -289,7 +296,9 @@
 
   <div class="tabs">
     <div class="tab active" data-tab="students"  onclick="switchTab(this,'students')">学生总览</div>
+    <div class="tab"        data-tab="live"      onclick="switchTab(this,'live')">本场监考</div>
     <div class="tab"        data-tab="questions" onclick="switchTab(this,'questions')">题库管理</div>
+    <div class="tab"        data-tab="analysis"  onclick="switchTab(this,'analysis')">试题分析</div>
     <div class="tab"        data-tab="export"    onclick="switchTab(this,'export')">导出报表</div>
     <div class="tab"        data-tab="accounts"  onclick="switchTab(this,'accounts')">账号管理</div>
   </div>
@@ -323,6 +332,23 @@
       </div>
     </div>
 
+    <!-- ② 本场监考 -->
+    <div class="panel" id="panel-live">
+      <div class="card">
+        <div class="search-bar">
+          <div class="card-title">本场监考</div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;color:var(--gray-600);white-space:nowrap">
+            <input type="checkbox" id="liveAuto" onchange="toggleLiveAuto()"> 每 30 秒自动刷新
+          </label>
+          <button class="btn btn-outline" onclick="loadLive()">刷新</button>
+        </div>
+        <p style="font-size:.78rem;color:var(--gray-500);margin:-4px 0 12px">「本场」＝自最近一次「开放考试」起的交卷记录。关闭再开放即开启新一场。</p>
+        <div class="stats-grid" id="liveStats"></div>
+        <div id="liveAlert"></div>
+        <div class="table-wrap" id="liveTable"><p style="color:var(--gray-500);font-size:.88rem">点「刷新」载入本场数据…</p></div>
+      </div>
+    </div>
+
     <!-- ③ 题库管理 -->
     <div class="panel" id="panel-questions">
       <div class="card">
@@ -333,6 +359,20 @@
         </div>
         <div id="questionsAlert"></div>
         <div class="table-wrap" id="questionsTable"><p style="color:var(--gray-500);font-size:.88rem">加载中…</p></div>
+      </div>
+    </div>
+
+    <!-- 试题分析 -->
+    <div class="panel" id="panel-analysis">
+      <div class="card">
+        <div class="search-bar">
+          <div class="card-title">试题分析</div>
+          <span id="analysisCount" style="font-size:.82rem;color:var(--gray-500);white-space:nowrap"></span>
+          <button class="btn btn-outline" onclick="loadAnalysis()">刷新</button>
+        </div>
+        <p style="font-size:.78rem;color:var(--gray-500);margin:-4px 0 12px">依正确率由低到高排序（最难在前）。仅统计 2026-09-01 起（开始记录逐题明细后）的作答。</p>
+        <div id="analysisAlert"></div>
+        <div class="table-wrap" id="analysisTable"><p style="color:var(--gray-500);font-size:.88rem">点「刷新」载入试题分析…</p></div>
       </div>
     </div>
 
@@ -493,6 +533,17 @@
   </div>
 </div>
 
+<!-- ── 学生详情 Modal ── -->
+<div class="modal-bg" id="studentDetailModal">
+  <div class="modal">
+    <h3 id="sdTitle">学生详情</h3>
+    <div id="sdBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('studentDetailModal')">关闭</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── 设置 ────────────────────────────────────────
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbymKvDkRyWPAMgm9YOh9h54IyRbncWPSOihQIp9WFVX7WknNLit7x9WMt3wlaORkEtycw/exec';
@@ -540,6 +591,8 @@ function doLogout() {
   // 通知后端作废 session（共用电脑情境下，前端丢 token 不够，伺服器端也要失效）；不阻断登出流程
   const oldToken = session && session.token;
   if (oldToken) { try { api('POST', { action:'logout', token: oldToken }); } catch (e) {} }
+  stopLiveAuto();
+  liveLoaded = false; analysisLoaded = false;   // 重新登录时再懒加载
   session = { token:'', name:'', employeeId:'', role:'' };
   sessionStorage.removeItem('adminSession');
   document.getElementById('loginWrap').style.display = 'flex';
@@ -667,7 +720,181 @@ function switchTab(el, name) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   el.classList.add('active');
   document.getElementById('panel-' + name).classList.add('active');
+  // 离开监考分页就停掉自动刷新，避免背景一直打 API
+  if (name !== 'live') stopLiveAuto();
+  if (name === 'live'     && !liveLoaded)     { liveLoaded = true; loadLive(); }
+  if (name === 'analysis' && !analysisLoaded) { analysisLoaded = true; loadAnalysis(); }
 }
+let liveLoaded = false, analysisLoaded = false;
+
+// ════════════════════════════════════════════════
+// 本场监考看板
+// ════════════════════════════════════════════════
+let liveTimer = null;
+async function loadLive() {
+  try {
+    const res = await api('GET', { action:'getLiveSession', token: session.token });
+    if (!res.success) { showEl('liveAlert', res.error || '加载失败', 'error'); return; }
+    renderLive(res);
+  } catch { showEl('liveAlert', '连线失败', 'error'); }
+}
+
+function renderLive(res) {
+  const s = res.summary;
+  const openBadge = res.open
+    ? '<span class="badge badge-green">考试开放中</span>'
+    : '<span class="badge badge-red">考试已关闭</span>';
+  document.getElementById('liveStats').innerHTML = `
+    <div class="stat-card"><div class="stat-num">${s.submitted}</div><div class="stat-label">本场已交卷</div></div>
+    <div class="stat-card"><div class="stat-num">${s.passed}</div><div class="stat-label">通过（≥50）</div></div>
+    <div class="stat-card"><div class="stat-num">${s.failed}</div><div class="stat-label">未通过</div></div>
+    <div class="stat-card"><div class="stat-num">${s.passRate}%</div><div class="stat-label">通过率</div></div>
+    <div class="stat-card"><div class="stat-num">${s.avg}</div><div class="stat-label">平均分</div></div>`;
+  const isAdmin = session.role !== 'viewer';
+  if (!res.sessionStart) {
+    document.getElementById('liveTable').innerHTML = `<p style="color:var(--gray-500);font-size:.88rem;padding-top:8px">${openBadge}　本场尚无记录（还没有人交卷，或考试从未开放过）。</p>`;
+    return;
+  }
+  if (!res.records.length) {
+    document.getElementById('liveTable').innerHTML = `<p style="color:var(--gray-500);font-size:.88rem;padding-top:8px">${openBadge}　本场还没有人交卷。</p>`;
+    return;
+  }
+  const rows = res.records.map(r => `<tr>
+    <td><a href="#" class="link" data-sid="${esc(r.studentId)}" onclick="openStudentDetail(this.dataset.sid);return false">${esc(r.studentId)}</a></td>
+    <td>${esc(r.name)}</td>
+    <td>${esc(r.score)}</td>
+    <td>${r.passed ? '<span class="badge badge-green">通过</span>' : '<span class="badge badge-red">未通过</span>'}</td>
+    <td>${esc(fmtTime(r.time))}</td>
+    <td>${esc(fmtDur(r.timeTaken))}</td>
+    ${isAdmin ? `<td><button class="btn btn-warning btn-sm" data-sid="${esc(r.studentId)}" onclick="resetAttempt(this.dataset.sid)">重考</button></td>` : ''}
+  </tr>`).join('');
+  document.getElementById('liveTable').innerHTML = `
+    <p style="margin:0 0 10px">${openBadge}</p>
+    <table><thead><tr><th>学号</th><th>姓名</th><th>得分</th><th>结果</th><th>交卷时间</th><th>用时</th>${isAdmin?'<th>操作</th>':''}</tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+function toggleLiveAuto() {
+  if (document.getElementById('liveAuto').checked) {
+    loadLive();
+    liveTimer = setInterval(loadLive, 30000);
+  } else stopLiveAuto();
+}
+function stopLiveAuto() {
+  if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+  const cb = document.getElementById('liveAuto');
+  if (cb) cb.checked = false;
+}
+
+function fmtTime(t) {
+  if (!t) return '—';
+  const d = new Date(t);
+  return isNaN(d.getTime()) ? '—' : d.toLocaleString('zh-CN');
+}
+function fmtDur(sec) {
+  const n = Number(sec);
+  if (!n || isNaN(n)) return '—';
+  const m = Math.floor(n / 60), s = n % 60;
+  return `${m} 分 ${s} 秒`;
+}
+
+// 让某学生重考本场（删掉他本场交卷记录）
+async function resetAttempt(studentId) {
+  if (!studentId) return;
+  if (!confirm(`确定让学号「${studentId}」重考本场吗？\n将删除他本场的交卷记录，之后他可重新领卷考试。此操作会记入操作日志。`)) return;
+  if (!guard('resetAttempt')) return;
+  try {
+    const res = await api('POST', { action:'resetStudentAttempt', token: session.token, studentId });
+    if (res.success) {
+      alert(`已重置：删除 ${res.removed} 笔记录，该生可重考。`);
+      closeModal('studentDetailModal');
+      if (liveLoaded) loadLive();
+      loadStudents();
+    } else alert(res.error || '操作失败');
+  } catch { alert('连线失败'); }
+  finally { unguard('resetAttempt'); }
+}
+
+// ════════════════════════════════════════════════
+// 试题分析
+// ════════════════════════════════════════════════
+async function loadAnalysis() {
+  try {
+    const res = await api('GET', { action:'getItemAnalysis', token: session.token });
+    if (!res.success) { showEl('analysisAlert', res.error || '加载失败', 'error'); return; }
+    renderAnalysis(res);
+  } catch { showEl('analysisAlert', '连线失败', 'error'); }
+}
+
+function renderAnalysis(res) {
+  document.getElementById('analysisCount').textContent = `累计 ${res.totalSubmissions} 份作答`;
+  if (!res.items.length) {
+    document.getElementById('analysisTable').innerHTML = '<p style="color:var(--gray-500);font-size:.88rem;padding-top:8px">尚无逐题作答数据（本功能自 2026-09-01 起开始累积，需有学生交卷后才有数据）。</p>';
+    return;
+  }
+  const rows = res.items.map(it => {
+    const rateColor = it.rate < 40 ? 'var(--danger)' : it.rate < 70 ? 'var(--warning)' : 'var(--success)';
+    return `<tr>
+      <td>${esc(it.questionId)}</td>
+      <td style="max-width:340px;word-break:break-word">${esc(it.text)}</td>
+      <td>${esc(it.appeared)}</td>
+      <td>${esc(it.correct)}</td>
+      <td class="bar-cell"><div class="bar" style="width:${it.rate}%"></div><span class="barlabel" style="font-weight:700;color:${rateColor}">${it.rate}%</span></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('analysisTable').innerHTML = `
+    <table><thead><tr><th>题号</th><th>题目</th><th>出现</th><th>答对</th><th>正确率（低→高）</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+// ════════════════════════════════════════════════
+// 学生详情
+// ════════════════════════════════════════════════
+async function openStudentDetail(studentId) {
+  const modal = document.getElementById('studentDetailModal');
+  document.getElementById('sdTitle').textContent = `学生详情 · ${studentId}`;
+  document.getElementById('sdBody').innerHTML = '<p style="color:var(--gray-500)">加载中…</p>';
+  modal.classList.add('open');
+  try {
+    const res = await api('GET', { action:'getStudent', token: session.token, studentId });
+    if (!res.success) { document.getElementById('sdBody').innerHTML = `<p style="color:var(--danger)">${esc(res.error||'查无资料')}</p>`; return; }
+    renderStudentDetail(res);
+  } catch { document.getElementById('sdBody').innerHTML = '<p style="color:var(--danger)">连线失败</p>'; }
+}
+
+function renderStudentDetail(res) {
+  const s = res.student;
+  const yn = v => (v === true || v === 'TRUE') ? '是' : (v === false || v === 'FALSE') ? '否' : '—';
+  const val = v => (v !== '' && v !== null && v !== undefined) ? v : '—';
+  const kv = (k, v) => `<div class="kv"><span class="k">${k}</span><span>${esc(v)}</span></div>`;
+  const st = studentStatus(s);
+
+  const recs = (res.records || []).slice().sort((a,b)=> new Date(b.time).getTime()-new Date(a.time).getTime());
+  const recRows = recs.length ? recs.map(r => `<tr>
+      <td>${esc(fmtTime(r.time))}</td>
+      <td>${esc(r.score)}</td>
+      <td>${(r.passed===true||r.passed==='TRUE') ? '<span class="badge badge-green">通过</span>' : '<span class="badge badge-red">未通过</span>'}</td>
+      <td>${esc(fmtDur(r.timeTaken))}</td>
+    </tr>`).join('')
+    : '<tr><td colspan="4" style="color:var(--gray-500)">尚无院考记录</td></tr>';
+
+  const isAdmin = session.role !== 'viewer';
+  document.getElementById('sdBody').innerHTML = `
+    ${kv('姓名', val(s.name))}
+    ${kv('专业', val(s.dept))}
+    ${kv('状态', st.label)}
+    ${kv('入学考（机考）', `${val(s.firstScore)}　${s.firstDate?('（'+fmtDay(s.firstDate)+'）'):''}`)}
+    ${kv('毕业考（机考）', `${val(s.secondScore)}　${s.secondDate?('（'+fmtDay(s.secondDate)+'）'):''}`)}
+    ${kv('是否需院考', yn(s.needExam))}
+    ${kv('院考最高分', val(s.bestScore))}
+    ${kv('院考通过', yn(s.passed))}
+    <div style="margin-top:16px;font-weight:700;font-size:.92rem">院考历次记录（${recs.length}）</div>
+    <div class="table-wrap" style="margin-top:8px">
+      <table><thead><tr><th>考试时间</th><th>得分</th><th>结果</th><th>用时</th></tr></thead><tbody>${recRows}</tbody></table>
+    </div>
+    ${isAdmin ? `<div style="margin-top:16px"><button class="btn btn-warning btn-sm" data-sid="${esc(s.studentId)}" onclick="resetAttempt(this.dataset.sid)">让 TA 重考本场（删除本场记录）</button></div>` : ''}`;
+}
+function fmtDay(t){ if(!t) return ''; const d=new Date(t); return isNaN(d.getTime())?String(t):d.toLocaleDateString('zh-CN'); }
 
 // ── Modal ──
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
@@ -822,7 +1049,8 @@ function renderStudentsTable() {
     const badge = `<span class="badge ${st.cls}">${st.label}</span>${warn}`;
     const d = s.lastExamDate ? new Date(s.lastExamDate).toLocaleDateString('zh-CN') : '—';
     return `<tr>
-      <td>${esc(s.studentId)}</td><td>${esc(s.name)}</td><td>${esc(val(s.dept))}</td>
+      <td><a href="#" class="link" data-sid="${esc(s.studentId)}" onclick="openStudentDetail(this.dataset.sid);return false">${esc(s.studentId)}</a></td>
+      <td>${esc(s.name)}</td><td>${esc(val(s.dept))}</td>
       <td>${esc(val(s.firstScore))}</td>
       <td>${esc(val(s.secondScore))}</td>
       <td>${badge}</td>
