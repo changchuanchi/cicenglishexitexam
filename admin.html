@@ -560,6 +560,24 @@ let studentPage     = 1;                          // 学生总览目前页码（
 let studentPageSize = 50;                         // 每页笔数；0 = 全部
 let examConfig   = { open: true, password: '' };
 
+// ── 闲置自动登出 ──
+// 登入后切换分页／操作都不会登出；只有「一段时间完全没有操作」才自动登出（共用电脑安全）。
+const IDLE_LIMIT_MS = 30 * 60 * 1000;   // 30 分钟无操作即自动登出
+let lastActivity = Date.now();
+let idleChecker  = null;
+function markActivity() { lastActivity = Date.now(); }
+function startIdleWatch() {
+  markActivity();
+  ['click','keydown','mousemove','wheel','scroll','touchstart'].forEach(ev =>
+    document.addEventListener(ev, markActivity, { passive: true }));
+  if (!idleChecker) idleChecker = setInterval(() => {
+    if (session.token && (Date.now() - lastActivity) > IDLE_LIMIT_MS) {
+      doLogout();
+      showEl('loginAlert', '因长时间未操作，已自动登出，请重新登录', 'error');
+    }
+  }, 60000);   // 每分钟检查一次
+}
+
 // ── 登录 ──
 async function doLogin() {
   const empId = document.getElementById('empIdInput').value.trim();
@@ -602,15 +620,13 @@ function doLogout() {
   document.getElementById('loginAlert').style.display = 'none';
 }
 
-// viewer 只读学生总览与导出；题库、账号、考试设置一律不打（后端也各自挡角色，前后端一致）
+// 一般管理员与超级管理员功能相同（含题库、考试控制），唯独「账号管理」仅超级管理员
 function loadAllData() {
   loadStudents();
   loadExport();
-  if (session.role !== 'viewer') {
-    loadQuestions();
-    loadAdmins();
-    loadExamConfig();
-  }
+  loadQuestions();
+  loadExamConfig();
+  if (session.role !== 'viewer') loadAdmins();   // 账号名单仅超级管理员
 }
 
 // ── 考试控制 ──
@@ -750,7 +766,7 @@ function renderLive(res) {
     <div class="stat-card"><div class="stat-num">${s.failed}</div><div class="stat-label">未通过</div></div>
     <div class="stat-card"><div class="stat-num">${s.passRate}%</div><div class="stat-label">通过率</div></div>
     <div class="stat-card"><div class="stat-num">${s.avg}</div><div class="stat-label">平均分</div></div>`;
-  const isAdmin = session.role !== 'viewer';
+  const isAdmin = true;   // 一般管理员也可重考（权限与超级管理员相同，仅「账号管理」除外）
   if (!res.sessionStart) {
     document.getElementById('liveTable').innerHTML = `<p style="color:var(--gray-500);font-size:.88rem;padding-top:8px">${openBadge}　本场尚无记录（还没有人交卷，或考试从未开放过）。</p>`;
     return;
@@ -878,7 +894,7 @@ function renderStudentDetail(res) {
     </tr>`).join('')
     : '<tr><td colspan="4" style="color:var(--gray-500)">尚无院考记录</td></tr>';
 
-  const isAdmin = session.role !== 'viewer';
+  const isAdmin = true;   // 一般管理员也可重考（权限与超级管理员相同，仅「账号管理」除外）
   document.getElementById('sdBody').innerHTML = `
     ${kv('姓名', val(s.name))}
     ${kv('专业', val(s.dept))}
@@ -1419,33 +1435,30 @@ function showEl(id, msg, type) {
 }
 
 // ── 角色权限控制 ──
+// 权限模型：一般管理员与超级管理员功能相同，唯独「账号管理」仅超级管理员可用。
+// 超级管理员 = 员工号 admin（role='admin'）；其余账号 = 一般管理员（role='viewer'）。
 function applyRolePermissions() {
-  // 先一律复原成全权限 UI —— 否则「viewer 登出→admin 同分页登入」时被隐藏的分页与考试卡不会回来
+  // 先一律复原：所有分页与考试控制卡都显示（避免「上一位登出→这位登入同分页」时残留隐藏）
   document.getElementById('examControlCard').style.display = '';
-  ['questions', 'accounts'].forEach(tab => {
+  ['live','questions','analysis','export','accounts'].forEach(tab => {
     const el = document.querySelector(`[data-tab="${tab}"]`);
     if (el) el.style.display = '';
   });
 
-  if (session.role !== 'viewer') return; // 只有明确为 viewer 才限制，undefined/admin 均为全权限
-
-  // viewer：隐藏写入功能分页与考试控制
-  document.getElementById('examControlCard').style.display = 'none';
-  ['questions', 'accounts'].forEach(tab => {
-    const el = document.querySelector(`[data-tab="${tab}"]`);
-    if (el) el.style.display = 'none';
-  });
-
-  // 切换到学生总览（第一个可见分页）
-  const firstTab = document.querySelector('.tab:not([style*="display: none"])');
-  if (firstTab) {
-    const tabName = firstTab.getAttribute('data-tab');
-    switchTab(firstTab, tabName);
-  }
-
-  // 顶部显示角色标记
   const nameEl = document.getElementById('topbarName');
-  if (nameEl) nameEl.textContent += '（检视者）';
+  const setSuffix = suffix => { if (nameEl && !/管理员）$/.test(nameEl.textContent)) nameEl.textContent += suffix; };
+
+  if (session.role !== 'viewer') { setSuffix('（超级管理员）'); return; }  // 超级管理员：全部功能
+
+  // 一般管理员：唯独隐藏「账号管理」
+  const acc = document.querySelector('[data-tab="accounts"]');
+  if (acc) acc.style.display = 'none';
+  const accPanel = document.getElementById('panel-accounts');
+  if (accPanel && accPanel.classList.contains('active')) {
+    const first = document.querySelector('[data-tab="students"]');
+    if (first) switchTab(first, 'students');
+  }
+  setSuffix('（一般管理员）');
 }
 
 // 恢复 session（若同一页刷新）—— 坏掉的暂存要清掉退回登录，否则每次载入都炸
@@ -1463,6 +1476,9 @@ if (saved) {
     sessionStorage.removeItem('adminSession');
   }
 }
+
+// 启动闲置侦测（未登入时不作用；登入后 30 分钟无操作自动登出）
+startIdleWatch();
 </script>
 </body>
 </html>
