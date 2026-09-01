@@ -370,7 +370,7 @@ ${step(8, '查看成绩', `
   <h3 style="text-align:center;margin-bottom:14px">现在就开始</h3>
   <div class="links">
     <a class="link-btn link-primary" href="https://changchuanchi.github.io/cicenglishexitexam/index.html">前往考试系统</a>
-    <a class="link-btn link-outline" href="https://changchuanchi.github.io/ciclearninghub/cicenglishexitexam_testbank.html" target="_blank" rel="noopener">题库练习（100 题）</a>
+    <a class="link-btn link-outline" href="testbank.html" target="_blank" rel="noopener">题库练习（100 题）</a>
   </div>
 </div>
 
