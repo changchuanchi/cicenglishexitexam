@@ -6,8 +6,8 @@ $codec = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Obj
 $ep = New-Object System.Drawing.Imaging.EncoderParameters(1)
 $ep.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter([System.Drawing.Imaging.Encoder]::Quality, 92)
 
-# result screens: crop to the card area (source is 1800x1800, 2x DPR)
-$cx = 380; $cy = 490; $cw = 1050; $ch = 1180
+# result screens: crop to the answer column (2026-10 two-column layout; source is 1800x1800, 2x DPR)
+$cx = 660; $cy = 40; $cw = 1120; $ch = 900
 
 foreach ($pattern in @('08-*.png', '09-*.png')) {
   $f = Get-ChildItem -Path $src -Filter $pattern | Select-Object -First 1
