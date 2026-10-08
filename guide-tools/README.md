@@ -21,7 +21,7 @@ loadExamStatus();
 
 | # | 指令 | 作用 | 产出 |
 |---|------|------|------|
-| 1 | `node shoot.js` | 重现九个阶段并截图（2 倍解析度 PNG） | `shots/` |
+| 1 | `node shoot.js` | 重现十个阶段并截图（2 倍解析度 PNG；2026-10 新增「10-切屏警告」） | `shots/` |
 | 2 | `powershell -File resize.ps1` | 缩到 1200px 宽、转 JPEG q90 | `opt/` |
 | 3 | `powershell -File crop.ps1` | 把两张成绩图裁切到卡片区域（并排时才看得清） | 覆写 `opt/08-*.jpg`、`opt/09-*.jpg` |
 | 4 | `node build-guide.js` | 组装单档 HTML（图片 base64 内嵌） | `guide.html` |
@@ -32,7 +32,9 @@ loadExamStatus();
 
 ## 注意事项
 
-- **路径**：脚本内的 `SRC` / `OUT` 为绝对路径，搬动专案要一并修改。
+- **路径**：脚本内的 `SRC` / `OUT` 为绝对路径，搬动专案要一并修改。改版还没上线前想先预览，可用环境变数覆盖：`GUIDE_SRC`（`shoot.js` 读哪份 index.html）、`GUIDE_OUT`（`build-guide.js` 输出到哪）。
+- **`INIT_RE`（2026-10 修）**：只比对页尾注解的开头「// 页面载入时读取专业清单与考试状态」，注解后面加字不会再让脚本找不到初始化区块（之前就是因此整套跑不了）。
+- **作答阶段会带浮水印**：`setQ()` 固定 `issuedAt` 再呼叫 `startProctor()`，截图里的浮水印时间才不会每次重出都不同。
 - **PowerShell 5.1 编码**：`crop.ps1` 刻意**不含任何中文字元**，改用 `08-*.png`
   这类 ASCII 万用字元比对档名 —— PS 5.1 会用 ANSI 读取 `.ps1`，脚本里写中文档名
   会变乱码而找不到档案（踩过这个坑）。
