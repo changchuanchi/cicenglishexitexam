@@ -22,8 +22,8 @@ loadExamStatus();
 | # | 指令 | 作用 | 产出 |
 |---|------|------|------|
 | 1 | `node shoot.js` | 重现十个阶段并截图（2 倍解析度 PNG；2026-10 新增「10-切屏警告」） | `shots/` |
-| 2 | `powershell -File resize.ps1` | 缩到 1200px 宽、转 JPEG q90 | `opt/` |
-| 3 | `powershell -File crop.ps1` | 把两张成绩图裁切到卡片区域（并排时才看得清） | 覆写 `opt/08-*.jpg`、`opt/09-*.jpg` |
+| 2 | Windows：`powershell -File resize.ps1`；macOS：`CROP="660 40 1120 900" ./optimize.sh`（一次做完 2＋3） | 缩到 1200px 宽、转 JPEG q90 | `opt/` |
+| 3 | Windows：`powershell -File crop.ps1`（macOS 已含在上一步） | 把两张成绩图裁切到作答栏（并排时才看得清）。**2026-10 改版后版面是左右两栏，裁切框改为 `x=660 y=40 w=1120 h=900`（2x 像素）**，Windows 的 `crop.ps1` 常数要同步改 | 覆写 `opt/08-*.jpg`、`opt/09-*.jpg` |
 | 4 | `node build-guide.js` | 组装单档 HTML（图片 base64 内嵌） | `guide.html` |
 | 5 | `node cdp2.js` | CDP 驱动 headless Chrome 验证排版 | `verify/` |
 
@@ -32,7 +32,11 @@ loadExamStatus();
 
 ## 注意事项
 
-- **路径**：脚本内的 `SRC` / `OUT` 为绝对路径，搬动专案要一并修改。改版还没上线前想先预览，可用环境变数覆盖：`GUIDE_SRC`（`shoot.js` 读哪份 index.html）、`GUIDE_OUT`（`build-guide.js` 输出到哪）。
+- **路径（2026-10 起跨平台）**：`shoot.js` 与 `build-guide.js` 预设读写「本资料夹的上一层」（`path.resolve(__dirname, '..')`），
+  Windows／macOS 都能直接跑、专案搬到哪或复制成预览副本都不必改路径。Chrome 路径依 `process.platform` 自动选，也可用环境变数 `CHROME` 覆盖。
+  环境变数 `GUIDE_SRC`（`shoot.js` 读哪份 index.html）、`GUIDE_OUT`（`build-guide.js` 输出到哪）仍可用。
+- **截图会放行 Google Fonts**：`--host-resolver-rules` 仍阻断所有外连（不会打到 GAS），但 EXCLUDE 了 `fonts.googleapis.com`／`fonts.gstatic.com`，
+  截图里的拉丁字母才会是线上同一套 Geist；没网路时会退回系统字体，截图照样能出，只是字形不同。
 - **`INIT_RE`（2026-10 修）**：只比对页尾注解的开头「// 页面载入时读取专业清单与考试状态」，注解后面加字不会再让脚本找不到初始化区块（之前就是因此整套跑不了）。
 - **作答阶段会带浮水印**：`setQ()` 固定 `issuedAt` 再呼叫 `startProctor()`，截图里的浮水印时间才不会每次重出都不同。
 - **PowerShell 5.1 编码**：`crop.ps1` 刻意**不含任何中文字元**，改用 `08-*.png`

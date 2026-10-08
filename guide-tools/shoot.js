@@ -5,11 +5,16 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 // GUIDE_SRC：改版还没上线前，可指向别处的 index.html 先产生截图预览
-const SRC = process.env.GUIDE_SRC || 'E:\\Claude 製作的工具\\CIC 英文毕业考试系统\\index.html';
-const LOGO = 'E:\\Claude 製作的工具\\CIC 英文毕业考试系统\\dpu logo.png';
+// 跨平台：Windows 走 E:\ 路径，macOS 走 /Volumes/CCC_Work；预设读「本资料夹的上一层」的 index.html，
+// 这样整个专案（含 guide-tools/）不管搬到哪、复制成预览副本，脚本都不必改路径。
+const PROJECT = path.resolve(__dirname, '..');
+const SRC = process.env.GUIDE_SRC || path.join(PROJECT, 'index.html');
+const LOGO = path.join(PROJECT, 'dpu logo.png');
 const OUT = path.join(__dirname, 'shots');
 const WORK = path.join(__dirname, 'work');
-const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const CHROME = process.env.CHROME || (process.platform === 'darwin'
+  ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+  : 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe');
 
 for (const d of [OUT, WORK]) fs.mkdirSync(d, { recursive: true });
 fs.copyFileSync(LOGO, path.join(WORK, 'dpu logo.png'));
@@ -133,11 +138,11 @@ document.title = ${JSON.stringify(st.name)};`;
   execFileSync(CHROME, [
     '--headless=new', '--disable-gpu', '--hide-scrollbars',
     '--force-device-scale-factor=2',
-    '--host-resolver-rules=MAP * 0.0.0.0',   // 硬性阻断任何外连，确保不打到 GAS
-    '--virtual-time-budget=3000',
+    '--host-resolver-rules=MAP * 0.0.0.0, EXCLUDE fonts.googleapis.com, EXCLUDE fonts.gstatic.com',   // 硬性阻断任何外连（确保不打到 GAS），只放行 Google Fonts，截图字体才与线上一致
+    '--virtual-time-budget=6000',
     `--window-size=${st.size[0]},${st.size[1]}`,
     `--screenshot=${png}`,
-    'file:///' + file.replace(/\\/g, '/')
+    (process.platform === 'win32' ? 'file:///' : 'file://') + file.replace(/\\/g, '/')
   ], { stdio: 'pipe', timeout: 60000 });
 
   const kb = Math.round(fs.statSync(png).size / 1024);

@@ -3,9 +3,11 @@ const fs = require('fs');
 const path = require('path');
 
 const OPT = path.join(__dirname, 'opt');
-const LOGO = 'E:\\Claude 製作的工具\\CIC 英文毕业考试系统\\dpu logo.png';
+// 跨平台：预设读写「本资料夹的上一层」，专案搬到哪都不必改路径
+const PROJECT = path.resolve(__dirname, '..');
+const LOGO = path.join(PROJECT, 'dpu logo.png');
 // GUIDE_OUT：改版还没上线前，可先输出到别处预览
-const OUT = process.env.GUIDE_OUT || 'E:\\Claude 製作的工具\\CIC 英文毕业考试系统\\guide.html';
+const OUT = process.env.GUIDE_OUT || path.join(PROJECT, 'guide.html');
 
 const jpg = n => 'data:image/jpeg;base64,' + fs.readFileSync(path.join(OPT, n + '.jpg')).toString('base64');
 const logo = 'data:image/png;base64,' + fs.readFileSync(LOGO).toString('base64');
@@ -32,171 +34,157 @@ const html = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <title>英文毕业考试 — 学生操作说明</title>
 <style>
+  /* Hallmark · genre: modern-minimal · macrostructure: Long Document（图文说明，步骤真有先后，故保留编号）· design-system: design.md · designed-as-app
+   * theme: custom · accent: #691BFF（品牌色，锁定）· display: Geist 600 · body: Geist 400 ＋ 系统中文 · mono: Geist Mono（步骤号、数字）
+   * pre-emit critique: P4 H4 E4 S4 R5 V3 · 2026-10-08
+   */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
+  html, body { overflow-x: clip; }
   :root {
-    --primary: #691BFF;
-    --primary-dark: #5312CC;
-    --primary-50: #F6F2FF;
-    --primary-100: #EBE1FF;
-    --success: #16a34a;
-    --danger: #dc2626;
-    --warning: #d97706;
-    --gray-50: #f9fafb;
-    --gray-100: #f3f4f6;
-    --gray-200: #e5e7eb;
-    --gray-500: #6b7280;
-    --gray-600: #4b5563;
-    --gray-700: #374151;
-    --gray-900: #111827;
-    --radius: 16px;
-    --shadow: 0 1px 2px rgba(17,24,39,.04), 0 8px 28px rgba(76,17,184,.09);
-  }
+    /* ── 色彩：锚定 DPU 品牌紫 #691BFF（色相 292°），所有中性色都带一点紫色调 ──
+       值以十六进位写出（旧版 Android／iOS 浏览器不认 oklch()），注解保留 OKLCH 原值。
+       品牌色只用在：主要按钮、分页标签底线、进度条、选中态、焦点环——占画面 5% 以下。 */
+    --color-accent:      #691BFF;  /* 品牌色，锁定不动。白字对比 6.56:1 */
+    --color-accent-deep: #5312CC;  /* hover／按下、浅紫底上的深色文字 */
+    --color-accent-ink:  #FCFBFE;  /* 品牌色底上的文字 */
+    --color-accent-soft: #F0EDFF;  /* 选中底、徽章底    oklch(95.5% .03 292) */
+    --color-accent-rule: #D8D1FD;  /* 选中框线          oklch(88% .06 292) */
+    --color-paper:   #FAF9FD;      /* 纸底              oklch(98.4% .005 292) */
+    --color-paper-2: #F3F2F8;      /* hover、次要底     oklch(96.4% .008 292) */
+    --color-paper-3: #EAE9F2;      /* 停用底、灰徽章    oklch(93.8% .012 292) */
+    --color-rule:    #D4D3DD;      /* 主要分隔线／框线  oklch(87% .014 292) */
+    --color-rule-2:  #E3E2EA;      /* 次要分隔线        oklch(91.5% .011 292) */
+    --color-muted:   #636073;      /* 次要文字          oklch(50% .03 292)  对纸底 5.8:1 */
+    --color-ink-2:   #3D3A4E;      /* 标签、次级标题    oklch(36% .035 292) */
+    --color-ink:     #191527;      /* 主要文字          oklch(21% .035 292) 对纸底 17:1 */
+    --color-ok:   #00792F; --color-ok-soft:   #DCF7E1; --color-ok-rule:   #A9DDB2;   /* 通过、成功 */
+    --color-warn: #9A5300; --color-warn-soft: #FFF0CC; --color-warn-rule: #F0CB8D;   /* 提醒、剩 10 分钟 */
+    --color-err:  #C2181D; --color-err-soft:  #FFE9E6; --color-err-rule:  #FCC0BA;   /* 错误、未通过、剩 5 分钟 */
+    --color-focus: #844CF8;        /* 键盘焦点环        oklch(58% .24 292) */
+    --color-scrim: rgba(25, 21, 39, .45);   /* 弹窗背后的遮罩（ink 带透明）*/
 
+    /* ── 字体：拉丁字母与数字用 Geist／Geist Mono（Google Fonts），中文走系统字体 ── */
+    --font-body: "Geist", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+                 "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+    /* ── 字级（1.25 大三度）、间距（4pt）、圆角、动态 ── */
+    --text-xs: .75rem;  --text-sm: .875rem; --text-md: 1.125rem; --text-lg: 1.375rem;
+    --text-xl: 1.75rem; --text-2xl: 2.25rem;
+    --space-2xs: .25rem; --space-xs: .5rem; --space-sm: .75rem; --space-md: 1rem;
+    --space-lg: 1.5rem;  --space-xl: 2.5rem; --space-2xl: 4rem;
+    --radius-sm: 6px; --radius-md: 10px;
+    --control-h: 44px;
+    --dur-micro: 120ms; --dur-short: 220ms; --dur-long: 420ms;
+    --ease-out: cubic-bezier(.16, 1, .3, 1); --ease-in: cubic-bezier(.7, 0, .84, 0);
+    --z-raised: 10; --z-sticky: 200; --z-modal: 400; --z-toast: 500;
+
+    /* ── 旧名别名：JS 与行内样式仍用这些名字，一律指到上面的 token；新样式请直接用新名字 ── */
+    --primary: var(--color-accent); --primary-dark: var(--color-accent-deep);
+    --primary-50: var(--color-accent-soft); --primary-100: var(--color-accent-rule);
+    --success: var(--color-ok); --danger: var(--color-err); --warning: var(--color-warn);
+    --gray-50: var(--color-paper-2); --gray-100: var(--color-paper-3); --gray-200: var(--color-rule-2);
+    --gray-300: var(--color-rule);  --gray-500: var(--color-muted);   --gray-600: var(--color-muted);
+    --gray-700: var(--color-ink-2); --gray-900: var(--color-ink);
+    --radius: var(--radius-md); --shadow: none; --shadow-lg: none;
+    --ring: 0 0 0 2px var(--color-focus);
+  }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
-    background:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cpath d='M30,0 L60,30 L30,60 L0,30 Z' stroke='%23691BFF' stroke-width='0.8' fill='none' opacity='0.10'/%3E%3Ccircle cx='30' cy='30' r='1.2' fill='%23691BFF' opacity='0.08'/%3E%3C/svg%3E"),
-      linear-gradient(135deg, #EFEAFF 0%, #F5F1FF 55%, #E9E3FF 100%);
-    background-attachment: fixed;
-    color: var(--gray-900);
-    line-height: 1.75;
-    padding: 28px 16px 60px;
-    -webkit-text-size-adjust: 100%;
+    font-family: var(--font-body); background: var(--color-paper); color: var(--color-ink); line-height: 1.7;
+    padding: var(--space-xl) var(--space-md) var(--space-2xl); -webkit-text-size-adjust: 100%; font-variant-numeric: tabular-nums;
   }
-
-  .wrap { max-width: 780px; margin: 0 auto; }
+  :focus { outline: none; }
+  :focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+  .wrap { max-width: 44rem; margin: 0 auto; }
 
   /* ── 页首 ── */
-  header { text-align: center; margin-bottom: 26px; }
-  header img { height: 60px; margin-bottom: 12px; }
-  header h1 {
-    font-size: 1.55rem; font-weight: 800; color: var(--primary-dark);
-    letter-spacing: -.01em; line-height: 1.35;
-  }
-  header .sub { font-size: .92rem; color: var(--gray-600); margin-top: 6px; }
+  header { display: flex; align-items: center; gap: var(--space-md); padding-bottom: var(--space-md); border-bottom: 1px solid var(--color-ink); }
+  header img { height: 40px; width: auto; flex-shrink: 0; }
+  header h1 { font-size: var(--text-xl); font-weight: 600; letter-spacing: -.02em; line-height: 1.2; overflow-wrap: anywhere; min-width: 0; }
+  header .sub { font-size: var(--text-sm); color: var(--color-muted); margin-top: var(--space-2xs); }
 
-  .card {
-    background: #fff; border-radius: var(--radius); box-shadow: var(--shadow);
-    border: 1px solid rgba(105,27,255,.06);
-    padding: 26px 28px; margin-bottom: 20px;
-  }
-
-  h2 { font-size: 1.12rem; font-weight: 700; color: var(--gray-900); }
-  h3 { font-size: 1rem; font-weight: 700; color: var(--gray-900); margin-bottom: 8px; }
+  .card, .step { padding: var(--space-lg) 0; border-bottom: 1px solid var(--color-rule); }
+  h2 { font-size: var(--text-lg); font-weight: 600; letter-spacing: -.01em; line-height: 1.3; }
+  h3 { font-size: 1rem; font-weight: 600; margin-bottom: var(--space-sm); }
 
   /* ── 考试速览 ── */
-  .facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-  .fact {
-    background: var(--primary-50); border: 1px solid var(--primary-100);
-    border-radius: 12px; padding: 14px 10px; text-align: center;
-  }
-  .fact b { display: block; font-size: 1.5rem; font-weight: 800; color: var(--primary); line-height: 1.2; }
-  .fact span { display: block; font-size: .78rem; color: var(--gray-600); margin-top: 2px; }
+  .facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--color-rule); border-bottom: 1px solid var(--color-rule); margin-bottom: var(--space-md); }
+  .fact { padding: var(--space-sm) var(--space-md); border-left: 1px solid var(--color-rule-2); }
+  .fact:first-child { border-left: 0; padding-left: 0; }
+  .fact b { display: block; font-family: var(--font-mono); font-size: var(--text-xl); font-weight: 500; line-height: 1.1; letter-spacing: -.02em; }
+  .fact span { display: block; font-size: var(--text-xs); color: var(--color-muted); margin-top: var(--space-2xs); }
 
   /* ── 步骤 ── */
-  .step { background: #fff; border-radius: var(--radius); box-shadow: var(--shadow);
-          border: 1px solid rgba(105,27,255,.06); padding: 26px 28px; margin-bottom: 20px; }
-  .step-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-  .step-num {
-    flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%;
-    background: var(--primary); color: #fff;
-    font-size: .95rem; font-weight: 800;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .step-body { font-size: .95rem; color: var(--gray-700); }
-  .step-body p { margin-bottom: 10px; }
-  .step-body ul { margin: 0 0 10px; padding-left: 20px; }
-  .step-body li { margin-bottom: 6px; }
-  .step-body li::marker { color: var(--primary); }
-  .step-body strong { color: var(--gray-900); }
-
-  code {
-    background: var(--primary-50); color: var(--primary-dark);
-    padding: 1px 7px; border-radius: 5px;
-    font-family: 'Consolas', 'Monaco', monospace; font-size: .88em; font-weight: 600;
-  }
+  .step-head { display: flex; align-items: baseline; gap: var(--space-sm); margin-bottom: var(--space-sm); }
+  .step-num { font-family: var(--font-mono); font-size: var(--text-md); font-weight: 500; color: var(--color-accent); flex-shrink: 0; }
+  .step-num::after { content: "."; }
+  .step-body { font-size: 1rem; color: var(--color-ink-2); }
+  .step-body p { margin-bottom: var(--space-xs); }
+  .step-body ul { margin: 0 0 var(--space-xs); padding-left: 1.25em; }
+  .step-body li { margin-bottom: var(--space-2xs); }
+  .step-body li::marker { color: var(--color-muted); }
+  .step-body strong { color: var(--color-ink); font-weight: 600; }
+  code { background: var(--color-accent-soft); color: var(--color-accent-deep); padding: 0 .4em; border-radius: 4px; font-family: var(--font-mono); font-size: .9em; }
 
   /* ── 截图 ── */
-  .shot { margin-top: 16px; }
-  .shot img {
-    width: 100%; height: auto; display: block;
-    border-radius: 12px; border: 1px solid var(--gray-200);
-    box-shadow: 0 4px 16px rgba(76,17,184,.10);
-  }
-  .shot figcaption {
-    font-size: .82rem; color: var(--gray-500);
-    text-align: center; margin-top: 8px;
-  }
-  .shot-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .shot-pair .shot { margin-top: 16px; }
+  .shot { margin-top: var(--space-md); }
+  .shot img { width: 100%; height: auto; display: block; border: 1px solid var(--color-rule); border-radius: var(--radius-sm); }
+  .shot figcaption { font-size: var(--text-xs); color: var(--color-muted); margin-top: var(--space-xs); }
+  .shot-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-md); }
 
   /* ── 提示框 ── */
-  .note {
-    border-radius: 10px; padding: 12px 16px; font-size: .9rem;
-    margin: 12px 0; border-left: 4px solid;
-  }
+  .note { border: 1px solid transparent; border-radius: var(--radius-sm); padding: var(--space-sm) var(--space-md); font-size: var(--text-sm); line-height: 1.6; margin: var(--space-sm) 0; }
   .note b { display: block; margin-bottom: 2px; }
-  .note-tip  { background: var(--primary-50); border-color: var(--primary); color: var(--primary-dark); }
-  .note-warn { background: #fffbeb; border-color: var(--warning); color: #92400e; }
-  .note-danger { background: #fef2f2; border-color: var(--danger); color: #991b1b; }
+  .note-tip    { background: var(--color-accent-soft); border-color: var(--color-accent-rule); color: var(--color-accent-deep); }
+  .note-warn   { background: var(--color-warn-soft);   border-color: var(--color-warn-rule);   color: var(--color-warn); }
+  .note-danger { background: var(--color-err-soft);    border-color: var(--color-err-rule);    color: var(--color-err); }
 
   /* ── 重要提醒清单 ── */
-  .alerts { list-style: none; padding: 0; }
-  .alerts li {
-    display: flex; gap: 12px; padding: 13px 0;
-    border-bottom: 1px solid var(--gray-100); font-size: .93rem; color: var(--gray-700);
-  }
-  .alerts li:last-child { border-bottom: none; }
-  .alerts .ico {
-    flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;
-    background: var(--danger); color: #fff; font-size: .85rem; font-weight: 800;
-    display: flex; align-items: center; justify-content: center; margin-top: 1px;
-  }
-  .alerts strong { color: var(--gray-900); }
+  .alerts { list-style: none; }
+  .alerts li { display: flex; gap: var(--space-sm); padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-rule-2); font-size: var(--text-sm); color: var(--color-ink-2); line-height: 1.6; }
+  .alerts li:last-child { border-bottom: 0; }
+  .alerts .ico { flex-shrink: 0; font-family: var(--font-mono); font-weight: 500; color: var(--color-err); min-width: 1.5ch; }
+  .alerts strong { color: var(--color-ink); }
 
   /* ── FAQ ── */
-  .faq { border-top: 1px solid var(--gray-100); }
-  .faq-item { border-bottom: 1px solid var(--gray-100); padding: 14px 0; }
-  .faq-q {
-    font-weight: 700; font-size: .95rem; color: var(--gray-900);
-    display: flex; gap: 9px; margin-bottom: 5px;
-  }
-  .faq-q .qm { color: var(--primary); font-weight: 800; flex-shrink: 0; }
-  .faq-a { font-size: .92rem; color: var(--gray-600); padding-left: 24px; }
+  .faq-item { padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-rule-2); }
+  .faq-item:last-child { border-bottom: 0; }
+  .faq-q { font-weight: 600; font-size: 1rem; display: flex; gap: var(--space-xs); margin-bottom: var(--space-2xs); }
+  .faq-q .qm { font-family: var(--font-mono); font-weight: 500; color: var(--color-accent); flex-shrink: 0; }
+  .faq-a { font-size: var(--text-sm); color: var(--color-ink-2); padding-left: calc(1ch + var(--space-xs)); }
 
   /* ── 页尾 ── */
-  .links { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
-  .link-btn {
-    flex: 1 1 220px; text-align: center; text-decoration: none;
-    padding: 14px 20px; border-radius: 12px; font-weight: 700; font-size: .95rem;
-    transition: all .18s;
+  .links { display: flex; gap: var(--space-xs); flex-wrap: wrap; }
+  .link-btn { display: inline-flex; align-items: center; justify-content: center; height: var(--control-h); padding: 0 var(--space-lg); border: 1px solid transparent; border-radius: var(--radius-sm); font-weight: 500; text-decoration: none; white-space: nowrap;
+    transition: background-color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out); }
+  .link-primary { background: var(--color-accent); color: var(--color-accent-ink); }
+  .link-outline { border-color: var(--color-rule); color: var(--color-ink-2); }
+  @media (hover: hover) {
+    .link-primary:hover { background: var(--color-accent-deep); }
+    .link-outline:hover { background: var(--color-paper-2); border-color: var(--color-ink-2); color: var(--color-ink); }
   }
-  .link-primary { background: var(--primary); color: #fff; }
-  .link-primary:hover { background: var(--primary-dark); transform: translateY(-1px);
-                        box-shadow: 0 6px 18px rgba(105,27,255,.30); }
-  .link-outline { background: #fff; color: var(--primary-dark); border: 1.5px solid var(--primary-100); }
-  .link-outline:hover { border-color: var(--primary); color: var(--primary); transform: translateY(-1px); }
-
-  footer { text-align: center; font-size: .8rem; color: var(--gray-500); margin-top: 26px; }
+  footer { font-size: var(--text-xs); color: var(--color-muted); margin-top: var(--space-lg); line-height: 1.6; }
 
   /* ── 手机 ── */
   @media (max-width: 620px) {
-    body { padding: 20px 12px 44px; }
-    .card, .step { padding: 20px 18px; }
-    header h1 { font-size: 1.24rem; }
-    .facts { grid-template-columns: repeat(2, 1fr); }
-    .shot-pair { grid-template-columns: 1fr; gap: 0; }
+    body { padding: var(--space-lg) var(--space-md) var(--space-2xl); }
+    header h1 { font-size: var(--text-lg); }
+    .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .fact:nth-child(odd) { border-left: 0; padding-left: 0; }
+    .fact:nth-child(n+3) { border-top: 1px solid var(--color-rule-2); }
+    .shot-pair { grid-template-columns: minmax(0, 1fr); }
   }
 
   /* ── 打印（可直接印成纸本发给学生）── */
   @media print {
-    body { background: #fff; padding: 0; }
-    .card, .step { box-shadow: none; border: 1px solid #ddd; page-break-inside: avoid; }
-    .link-btn { border: 1px solid #ccc; }
+    body { background: var(--color-paper); padding: 0; }
+    .card, .step { page-break-inside: avoid; }
   }
 </style>
 </head>
@@ -205,8 +193,8 @@ const html = `<!DOCTYPE html>
 
 <header>
   <img src="${logo}" alt="DPU">
-  <h1>英文毕业考试 · 学生操作说明</h1>
-  <p class="sub">博仁大学中文国际学院　|　线上考试系统图文指南</p>
+  <div><h1>英文毕业考试 · 学生操作说明</h1>
+  <p class="sub">博仁大学中文国际学院 · 线上考试系统图文指南</p></div>
 </header>
 
 <div class="card">
@@ -232,7 +220,7 @@ ${step(1, '打开考试网址，填写报名资料', `
     <li><strong>考场密码</strong> —— <em>只有</em>监考老师设置密码时才会出现这一栏，请向监考老师索取；<strong>没有出现就代表不需要密码</strong>。</li>
     <li><strong>进场码</strong> —— <em>只有</em>老师开启时才会出现。请输入<strong>教室屏幕上</strong>显示的 4 位数字；进场码<strong>每 30 秒更换</strong>，请输入「现在」屏幕上的那一组。</li>
   </ul>
-  <p>全部填好后，按下紫色的「<strong>开始考试</strong>」按钮。</p>
+  <p>全部填好后，按下紫色的「<strong>开始考试</strong>」按钮。画面左侧（手机上在最上方）固定显示校名、考试规格与「考试说明」「题库练习」入口，考试中也看得到。</p>
   <div class="note note-warn">
     <b>注意</b>
     按下「开始考试」的那一刻，60 分钟倒计时立即开始。请确认自己已准备好再按。
@@ -265,9 +253,9 @@ ${step(4, '切换题目', `
 ${step(5, '留意剩余时间', `
   <p>右上角的倒计时会随剩余时间改变颜色，提醒你把握时间：</p>
   <ul>
-    <li><span style="color:var(--primary);font-weight:700">紫色</span> —— 时间充裕。</li>
-    <li><span style="color:var(--warning);font-weight:700">橙色</span> —— 剩余 10 分钟。</li>
-    <li><span style="color:var(--danger);font-weight:700">红色</span> —— 剩余 5 分钟，请尽快完成。</li>
+    <li><strong>深色</strong> —— 时间充裕。</li>
+    <li><strong style="color:var(--color-warn)">橙色</strong> —— 剩余 10 分钟。</li>
+    <li><strong style="color:var(--color-err)">红色</strong> —— 剩余 5 分钟，请尽快完成。</li>
   </ul>
   <p>时间一到，系统会<strong>自动交卷</strong>，已作答的题目照常计分。</p>
   <div class="note note-danger">
@@ -291,9 +279,9 @@ ${step(6, '不要离开考试画面（超过 2 次会被收卷）', `
   shot('10-切屏警告', '⑥ 切屏后回到考试画面，上方显示红色提示'))}
 
 ${step(7, '交卷', `
-  <p>翻到<strong>最后一题（第 50 题）</strong>时，下方会出现绿色的「<strong>交卷</strong>」按钮。</p>
+  <p>翻到<strong>最后一题（第 50 题）</strong>时，下方会出现紫色的「<strong>交卷</strong>」按钮。</p>
   <p>确认答案无误后按下即可送出，<strong>不必等时间用完</strong>。</p>`,
-  shot('06-最后一题交卷', '⑦ 最后一题下方出现绿色「交卷」按钮'))}
+  shot('06-最后一题交卷', '⑦ 最后一题下方出现紫色「交卷」按钮'))}
 
 ${step(8, '若还有题目没作答', `
   <p>按下交卷时，若系统发现还有题目没作答，会以红字提醒你还剩几题未答，<strong>需要再按一次「交卷」才会真正送出</strong>。</p>
@@ -307,8 +295,8 @@ ${step(8, '若还有题目没作答', `
 ${step(9, '查看成绩', `
   <p>交卷后<strong>立即显示成绩</strong>：分数、答对题数，以及你的学号、姓名、科系。</p>
   <ul>
-    <li><strong style="color:var(--success)">满 50 分</strong> —— 显示绿色圆环与「恭喜，考试通过！」。</li>
-    <li><strong style="color:var(--danger)">未满 50 分</strong> —— 显示红色圆环与「本次未通过」。</li>
+    <li><strong style="color:var(--success)">满 50 分</strong> —— 分数以绿色显示，并写「恭喜，考试通过！」。</li>
+    <li><strong style="color:var(--danger)">未满 50 分</strong> —— 分数以红色显示，并写「本次未通过」。</li>
   </ul>
   <p>成绩已由系统<strong>自动记录</strong>，不需要另外回报。按「完成」即可离开。</p>
   <div class="note note-warn">
@@ -316,12 +304,12 @@ ${step(9, '查看成绩', `
     按下「完成」离开后，页面不会再显示这次的分数。如需查询成绩，请向老师洽询（后台皆有完整记录）。
   </div>`,
   `<div class="shot-pair">
-    ${shot('08-成绩通过', '⑨ 通过：82 分（绿色）')}
-    ${shot('09-成绩未通过', '⑨ 未通过：38 分（红色）')}
+    ${shot('08-成绩通过', '⑨ 通过：82 分，绿色')}
+    ${shot('09-成绩未通过', '⑨ 未通过：38 分，红色')}
   </div>`)}
 
 <div class="card">
-  <h2 style="margin-bottom:6px">⚠️ 六个最重要的提醒</h2>
+  <h2 style="margin-bottom:6px">六个最重要的提醒</h2>
   <ul class="alerts">
     <li>
       <span class="ico">1</span>
@@ -397,7 +385,7 @@ ${step(9, '查看成绩', `
 </div>
 
 <div class="card">
-  <h3 style="text-align:center;margin-bottom:14px">现在就开始</h3>
+  <h3>现在就开始</h3>
   <div class="links">
     <a class="link-btn link-primary" href="https://changchuanchi.github.io/cicenglishexitexam/index.html">前往考试系统</a>
     <a class="link-btn link-outline" href="testbank.html" target="_blank" rel="noopener">题库练习（100 题）</a>
