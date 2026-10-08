@@ -1104,7 +1104,7 @@ function fmtDur(sec) {
 // 让某学生重考本场（删掉他本场交卷记录）
 async function resetAttempt(studentId) {
   if (!studentId) return;
-  if (!confirm(`确定让学号「${studentId}」重考本场吗？\n将删除他本场的交卷记录，之后他可重新领卷考试。此操作会记入操作日志。`)) return;
+  if (!confirm(`确定让学号「${studentId}」重考本场吗？\n将删除他本场的交卷记录，院考最高分／是否通过会依他其余的记录重算，之后他可重新领卷考试。此操作会记入操作日志。`)) return;
   if (!guard('resetAttempt')) return;
   try {
     const res = await api('POST', { action:'resetStudentAttempt', token: session.token, studentId });
