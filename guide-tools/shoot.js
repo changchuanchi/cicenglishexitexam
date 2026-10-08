@@ -4,7 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const SRC = 'E:\\Claude 製作的工具\\CIC 英文毕业考试系统\\index.html';
+// GUIDE_SRC：改版还没上线前，可指向别处的 index.html 先产生截图预览
+const SRC = process.env.GUIDE_SRC || 'E:\\Claude 製作的工具\\CIC 英文毕业考试系统\\index.html';
 const LOGO = 'E:\\Claude 製作的工具\\CIC 英文毕业考试系统\\dpu logo.png';
 const OUT = path.join(__dirname, 'shots');
 const WORK = path.join(__dirname, 'work');
@@ -35,11 +36,13 @@ const MOCK_Q = Array.from({ length: 50 }, (_, i) => {
 
 // 各阶段：name = 档名，code = 注入的驱动脚本，size = 视窗尺寸
 const DEPTS = "['国际商务','金融会计','创意设计','旅游管理','数位传媒']";
+// 作答画面一律带浮水印（startProctor），与学生实际看到的一致；浮水印时间固定，截图才不会每次重出都不同
 const setQ = (idx, qid) => `
   currentStudent = { studentId: '99990004', name: '陈明学', dept: '国际商务' };
   questions = MOCK_Q; answers = {}; currentIdx = ${idx};
   ${qid !== undefined ? `answers[questions[${idx}].questionId] = '${qid}';` : ''}
-  renderQuestion(); showScreen('examScreen');`;
+  issuedAt = new Date('2026-12-15T09:00:00').getTime();
+  showScreen('examScreen'); renderQuestion(); startProctor();`;
 const setTimer = (txt, cls) => `
   var t = document.getElementById('timer');
   t.textContent = '${txt}'; t.className = 'timer${cls ? ' ' + cls : ''}';`;
@@ -49,10 +52,12 @@ const STAGES = [
     name: '01-登记填写', size: [900, 900],
     code: `
       document.getElementById('examPwGroup').style.display = 'block';
+      document.getElementById('entryCodeGroup').style.display = 'block';
       document.getElementById('studentIdInput').value = '99990004';
       document.getElementById('studentNameInput').value = '陈明学';
       document.getElementById('studentDeptInput').value = '国际商务';
-      document.getElementById('examPwInput').value = 'cic2026';`
+      document.getElementById('examPwInput').value = 'cic2026';
+      document.getElementById('entryCodeInput').value = '4827';`
   },
   {
     name: '02-考试未开放', size: [900, 820],
@@ -98,10 +103,19 @@ const STAGES = [
     code: `
       currentStudent = { studentId: '99990004', name: '陈明学', dept: '国际商务' };
       showResult({ score: 38, passed: false, correct: 19, total: 50 });`
+  },
+  {
+    // 切回考试画面时跳出的警告（toast 平常 5 秒后消失；截图时把计时器清掉让它留着）
+    name: '10-切屏警告', size: [900, 860],
+    code: setQ(12, 'A') + setTimer('41:20') + `
+      proctor.blur = 1;
+      awayToast('blur', '');
+      clearTimeout(toastTimer);`
   }
 ];
 
-const INIT_RE = /\/\/ 页面载入时读取专业清单与考试状态\s*\r?\nloadDepartments\(\);\s*\r?\nloadExamStatus\(\);/;
+// 注解行后面可能还有补充说明（例如「；若侦测到…」），只比对开头
+const INIT_RE = /\/\/ 页面载入时读取专业清单与考试状态[^\n]*\r?\nloadDepartments\(\);\s*\r?\nloadExamStatus\(\);/;
 if (!INIT_RE.test(original)) { console.error('找不到初始化区块，index.html 结构可能已变更'); process.exit(1); }
 
 for (const st of STAGES) {

@@ -4,7 +4,8 @@ const path = require('path');
 
 const OPT = path.join(__dirname, 'opt');
 const LOGO = 'E:\\Claude 製作的工具\\CIC 英文毕业考试系统\\dpu logo.png';
-const OUT = 'E:\\Claude 製作的工具\\CIC 英文毕业考试系统\\guide.html';
+// GUIDE_OUT：改版还没上线前，可先输出到别处预览
+const OUT = process.env.GUIDE_OUT || 'E:\\Claude 製作的工具\\CIC 英文毕业考试系统\\guide.html';
 
 const jpg = n => 'data:image/jpeg;base64,' + fs.readFileSync(path.join(OPT, n + '.jpg')).toString('base64');
 const logo = 'data:image/png;base64,' + fs.readFileSync(LOGO).toString('base64');
@@ -229,13 +230,15 @@ ${step(1, '打开考试网址，填写报名资料', `
     <li><strong>姓名</strong> —— 填写本人姓名。</li>
     <li><strong>科系</strong> —— 从下拉选单中选择自己的科系。</li>
     <li><strong>考场密码</strong> —— <em>只有</em>监考老师设置密码时才会出现这一栏，请向监考老师索取；<strong>没有出现就代表不需要密码</strong>。</li>
+    <li><strong>进场码</strong> —— <em>只有</em>老师开启时才会出现。请输入<strong>教室屏幕上</strong>显示的 4 位数字；进场码<strong>每 30 秒更换</strong>，请输入「现在」屏幕上的那一组。</li>
   </ul>
   <p>全部填好后，按下紫色的「<strong>开始考试</strong>」按钮。</p>
   <div class="note note-warn">
     <b>注意</b>
     按下「开始考试」的那一刻，60 分钟倒计时立即开始。请确认自己已准备好再按。
+    若老师使用考试名册，<strong>学号与姓名必须与名册一致</strong>才能进入。
   </div>`,
-  shot('01-登记填写', '① 填写学号、姓名、科系（本例另有考场密码栏）'))}
+  shot('01-登记填写', '① 填写学号、姓名、科系（本例另有考场密码与进场码栏）'))}
 
 ${step(2, '如果看到「考试未开放」', `
   <p>考试由监考老师统一开放。若你打开页面时看到红色提示、按钮变成灰色的「考试未开放」，表示老师尚未开放考试。</p>
@@ -250,7 +253,8 @@ ${step(3, '开始作答', `
     <li><strong>题目</strong> —— 英文句子中的 <code>_____</code> 就是要填入的空格。</li>
     <li><strong>四个选项 A / B / C / D</strong> —— 点击任一选项即选中，选中的选项会变成<strong>紫色高亮</strong>。</li>
   </ul>
-  <p>选错了没关系，<strong>直接点另一个选项就能改</strong>，交卷前都可以修改。</p>`,
+  <p>选错了没关系，<strong>直接点另一个选项就能改</strong>，交卷前都可以修改。</p>
+  <p>画面上淡淡的斜字是<strong>你的学号与姓名浮水印</strong>，用来辨识考卷，不影响作答。</p>`,
   shot('03-第一题作答', '③ 作答画面，B 选项已选中（紫色高亮）'))}
 
 ${step(4, '切换题目', `
@@ -268,25 +272,39 @@ ${step(5, '留意剩余时间', `
   <p>时间一到，系统会<strong>自动交卷</strong>，已作答的题目照常计分。</p>
   <div class="note note-danger">
     <b>特别提醒：计时不会暂停</b>
-    倒计时以「开始考试的时刻」为准。<strong>切换到其他 App、手机锁屏、把页面切到背景，时间都会继续走</strong>，请勿中途离开。
+    倒计时以「开始考试的时刻」为准。<strong>切换到其他 App、手机锁屏、把页面切到背景，时间都会继续走</strong>，而且<strong>会被记录为切屏</strong>（见下一步），请勿中途离开。
   </div>`,
   shot('05-计时警示', '⑤ 剩余 5 分钟，倒计时转为红色'))}
 
-${step(6, '交卷', `
+${step(6, '不要离开考试画面（超过 2 次会被收卷）', `
+  <p>考试中系统会记录以下三种行为，<strong>每一种各自计次，任何一种超过 2 次（第 3 次）系统就会自动收卷</strong>，已作答的题目照常计分、没答的算错：</p>
+  <ul>
+    <li><strong>切屏</strong> —— 切到别的 App 或分页、回到手机桌面、<strong>锁屏</strong>。</li>
+    <li><strong>失焦</strong> —— 考试画面被其他程序盖住或缩小：圈选搜索、Google Lens、翻译悬浮球、分屏或小窗；电脑上点到别的视窗超过 5 秒也算。</li>
+    <li><strong>网页翻译</strong> —— 使用浏览器的翻译功能。题目会被<strong>自动还原成英文</strong>，翻了也看不到中文，而且会记一次。</li>
+  </ul>
+  <p>每记一次，画面上方会跳出红色提示「已记录切屏 1 / 2 次」；到第 2 次会提醒「再一次就会被收卷」。所有记录监考老师都看得到。</p>
+  <div class="note note-tip">
+    <b>手机没电、网页不小心关掉怎么办？</b>
+    重新打开考试网址，用<strong>同一个学号</strong>登记，就会回到<strong>原本那份考卷</strong>，已作答的内容会保留（最后十几秒内的作答可能要补选），计时照原本的截止时间。换一台设备也可以，但会被记录为「换设备」，原本那台就不能再作答。
+  </div>`,
+  shot('10-切屏警告', '⑥ 切屏后回到考试画面，上方显示红色提示'))}
+
+${step(7, '交卷', `
   <p>翻到<strong>最后一题（第 50 题）</strong>时，下方会出现绿色的「<strong>交卷</strong>」按钮。</p>
   <p>确认答案无误后按下即可送出，<strong>不必等时间用完</strong>。</p>`,
-  shot('06-最后一题交卷', '⑥ 最后一题下方出现绿色「交卷」按钮'))}
+  shot('06-最后一题交卷', '⑦ 最后一题下方出现绿色「交卷」按钮'))}
 
-${step(7, '若还有题目没作答', `
+${step(8, '若还有题目没作答', `
   <p>按下交卷时，若系统发现还有题目没作答，会以红字提醒你还剩几题未答，<strong>需要再按一次「交卷」才会真正送出</strong>。</p>
   <p>想回去补答，就用「← 上一题」翻回去；确定要直接交卷，再按一次即可。</p>
   <div class="note note-tip">
     <b>关于计分</b>
     答对一题得 2 分，<strong>答错或未作答都不倒扣</strong>。所以就算不确定，也建议猜一个答案，不要留空。
   </div>`,
-  shot('07-未作答提醒', '⑦ 尚有题目未作答时的红字提醒'))}
+  shot('07-未作答提醒', '⑧ 尚有题目未作答时的红字提醒'))}
 
-${step(8, '查看成绩', `
+${step(9, '查看成绩', `
   <p>交卷后<strong>立即显示成绩</strong>：分数、答对题数，以及你的学号、姓名、科系。</p>
   <ul>
     <li><strong style="color:var(--success)">满 50 分</strong> —— 显示绿色圆环与「恭喜，考试通过！」。</li>
@@ -298,31 +316,35 @@ ${step(8, '查看成绩', `
     按下「完成」离开后，页面不会再显示这次的分数。如需查询成绩，请向老师洽询（后台皆有完整记录）。
   </div>`,
   `<div class="shot-pair">
-    ${shot('08-成绩通过', '⑧ 通过：82 分（绿色）')}
-    ${shot('09-成绩未通过', '⑧ 未通过：38 分（红色）')}
+    ${shot('08-成绩通过', '⑨ 通过：82 分（绿色）')}
+    ${shot('09-成绩未通过', '⑨ 未通过：38 分（红色）')}
   </div>`)}
 
 <div class="card">
-  <h2 style="margin-bottom:6px">⚠️ 五个最重要的提醒</h2>
+  <h2 style="margin-bottom:6px">⚠️ 六个最重要的提醒</h2>
   <ul class="alerts">
     <li>
       <span class="ico">1</span>
-      <div><strong>计时不会暂停。</strong>切换 App、锁屏、关掉页面，60 分钟都持续在走，离开多久就少答多久。</div>
+      <div><strong>不要离开考试画面。</strong>切屏（含锁屏）、画面被盖住或缩小（圈选搜索、悬浮窗、分屏）、使用网页翻译，<strong>任何一种超过 2 次，系统会自动收卷</strong>。</div>
     </li>
     <li>
       <span class="ico">2</span>
-      <div><strong>考试中切勿刷新或关闭页面。</strong>一旦刷新或关闭，页面会回到登记画面，<strong>已作答的内容全部消失</strong>，必须从头重新开始。</div>
+      <div><strong>计时不会暂停。</strong>切换 App、锁屏、关掉页面，60 分钟都持续在走，离开多久就少答多久。时间到没交卷，系统会用你最后存下的答案自动交卷。</div>
     </li>
     <li>
       <span class="ico">3</span>
-      <div><strong>请保持网络畅通。</strong>取题与交卷都需要连网，建议使用稳定的 Wi-Fi 或行动网络。</div>
+      <div><strong>页面关掉了，用同一个学号重新登记即可。</strong>会回到原本那份考卷，已作答的内容会保留，计时照原本的截止时间；不会重新给 60 分钟。</div>
     </li>
     <li>
       <span class="ico">4</span>
-      <div><strong>交卷若没反应，再按一次就好。</strong>网络不顺时，系统最多等 30 秒就会提示「提交逾时，答案未送出」，此时<strong>再按一次「交卷」</strong>即可，<strong>不会重复计分</strong>。</div>
+      <div><strong>请保持网络畅通。</strong>取题、存档与交卷都需要连网，建议使用稳定的 Wi-Fi 或行动网络。</div>
     </li>
     <li>
       <span class="ico">5</span>
+      <div><strong>交卷若没反应，再按一次就好。</strong>网络不顺时，系统最多等 30 秒就会提示「提交逾时，答案未送出」，此时<strong>再按一次「交卷」</strong>即可，<strong>不会重复计分</strong>。</div>
+    </li>
+    <li>
+      <span class="ico">6</span>
       <div><strong>每个人的考卷都不一样。</strong>题目从题库随机抽取，连选项顺序都是随机的，与邻座同学对答案没有意义。</div>
     </li>
   </ul>
@@ -337,7 +359,7 @@ ${step(8, '查看成绩', `
     </div>
     <div class="faq-item">
       <div class="faq-q"><span class="qm">Q</span>可以用手机考试吗？</div>
-      <div class="faq-a">可以。手机、平板、电脑的浏览器都能使用，画面会自动调整。若用手机，请特别注意<strong>不要锁屏或切换到其他 App</strong>。</div>
+      <div class="faq-a">可以。手机、平板、电脑的浏览器都能使用，画面会自动调整。若用手机，请特别注意<strong>不要锁屏、不要切换到其他 App、不要开分屏或小窗</strong>，这些都会被记录。</div>
     </div>
     <div class="faq-item">
       <div class="faq-q"><span class="qm">Q</span>题目从哪里来？会考几题？</div>
@@ -357,7 +379,15 @@ ${step(8, '查看成绩', `
     </div>
     <div class="faq-item">
       <div class="faq-q"><span class="qm">Q</span>考试中不小心关掉页面了，怎么办？</div>
-      <div class="faq-a">已作答的内容无法复原，需要重新登记、重新作答。请立即告知监考老师。</div>
+      <div class="faq-a">重新打开考试网址，用<strong>同一个学号</strong>登记，就会回到原本那份考卷，已作答的内容会保留（最后十几秒内的作答可能要补选）。计时不会暂停，照原本的截止时间。</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q"><span class="qm">Q</span>手机没电了，可以换一台继续考吗？</div>
+      <div class="faq-a">可以。在另一台设备用同一个学号登记，就会接着原本的考卷作答。系统会记录「换设备」，原本那台设备之后就不能再作答。</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q"><span class="qm">Q</span>被系统收卷了，成绩还算吗？</div>
+      <div class="faq-a">算。收卷时<strong>已作答的题目照常计分</strong>，没作答的算错；成绩画面会说明收卷原因。如有疑问请向监考老师反映。</div>
     </div>
     <div class="faq-item">
       <div class="faq-q"><span class="qm">Q</span>考前可以练习吗？</div>

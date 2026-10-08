@@ -1,7 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<!-- translate="no" + notranslate：挡掉浏览器「一键翻译整页」—— 题目是英文，翻了等于送分 -->
+<html lang="zh-CN" translate="no">
 <head>
 <meta charset="UTF-8">
+<meta name="google" content="notranslate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>学院英文毕业考试 — 学生入口</title>
 <style>
@@ -236,6 +238,41 @@
   .result-label { font-size: 1.2rem; font-weight: 700; margin-bottom: 6px; }
   .result-detail { font-size: .88rem; color: var(--gray-600); }
 
+  /* ── 防作弊 ── */
+  /* 浮水印：作答中满版铺「学号 · 姓名／发卷时间」，截图／拍照外流看得出是谁的卷子 */
+  #watermark {
+    position: fixed; inset: 0; z-index: 5; pointer-events: none;
+    display: none; background-repeat: repeat;
+  }
+  body.taking #watermark { display: block; }
+  /* 作答中题目不可选取（挡「复制题目贴进翻译／字典」） */
+  body.taking #questionContainer { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  /* 警告提示（切屏、失焦记次后跳出） */
+  #warnToast {
+    position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 20;
+    width: max-content; max-width: calc(100vw - 32px);
+    background: var(--danger); color: #fff; border-radius: 10px;
+    padding: 12px 18px; font-size: .9rem; line-height: 1.5;
+    box-shadow: 0 8px 24px rgba(220,38,38,.30);
+  }
+  #warnToast[hidden] { display: none; }
+  /* 侦测到网页翻译时的常驻警告条 */
+  #xlateBar {
+    background: #fee2e2; color: var(--danger); border-radius: 8px;
+    padding: 10px 14px; font-size: .85rem; line-height: 1.6; margin-bottom: 14px;
+  }
+  #xlateBar[hidden] { display: none; }
+  /* 被换设备停止作答时的讯息 */
+  .stop-note { text-align: center; padding: 12px 0; }
+  .stop-note h2 { color: var(--danger); margin-bottom: 10px; }
+  .stop-note p  { font-size: .92rem; color: var(--gray-700); line-height: 1.7; }
+  /* 成绩页：被系统／老师收卷时的说明 */
+  .result-note {
+    margin-top: 14px; padding: 10px 14px; border-radius: 8px;
+    background: #fee2e2; color: var(--danger); font-size: .86rem; line-height: 1.6;
+  }
+  .result-note[hidden] { display: none; }
+
   @media (max-width: 520px) {
     .card { padding: 24px 20px; }
     #examScreen { max-width: 100%; }
@@ -243,6 +280,10 @@
 </style>
 </head>
 <body>
+
+<!-- 作答中的浮水印与警告提示；放在题目区外，翻译侦测的快照不受影响 -->
+<div id="watermark" aria-hidden="true" class="notranslate" translate="no"></div>
+<div id="warnToast" role="alert" hidden></div>
 
 <div class="logo">
   <img src="dpu%20logo.png" alt="DPU Logo" style="height:64px;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto;">
@@ -278,6 +319,11 @@
     <label for="examPwInput">考场密码</label>
     <input type="text" id="examPwInput" placeholder="请向监考老师索取" autocomplete="off">
   </div>
+  <div class="form-group" id="entryCodeGroup" style="display:none">
+    <label for="entryCodeInput">进场码</label>
+    <input type="text" id="entryCodeInput" placeholder="教室屏幕上的 4 位数字（每 30 秒更换）"
+      inputmode="numeric" maxlength="4" autocomplete="off">
+  </div>
   <button class="btn btn-primary" id="loginBtn" onclick="handleLogin()">开始考试</button>
   <p style="font-size:.8rem;color:var(--gray-600);margin-top:10px;text-align:center">
     考试开始后计时即刻启动，共 50 题，时间 60 分钟
@@ -296,7 +342,8 @@
     <div class="timer" id="timer" role="timer" aria-live="polite" aria-label="剩余时间">60:00</div>
   </div>
 
-  <div id="questionContainer"></div>
+  <div id="xlateBar" role="alert" hidden></div>
+  <div id="questionContainer" class="notranslate" translate="no"></div>
 
   <div class="nav-buttons">
     <button class="btn btn-outline" id="prevBtn" onclick="navigate(-1)">← 上一题</button>
@@ -325,6 +372,7 @@
     </div>
     <div class="result-label" id="resultLabel"></div>
     <div class="result-detail" id="resultDetail"></div>
+    <div class="result-note" id="resultNote" hidden></div>
   </div>
   <div style="margin-top:20px;border-top:1px solid var(--gray-100);padding-top:16px">
     <div class="info-row">
@@ -341,6 +389,15 @@
     </div>
   </div>
   <button class="btn btn-outline" style="width:100%;margin-top:16px" onclick="logout()">完成</button>
+</div>
+
+<!-- ⑤同一学号在另一台设备进入本场考试：这台设备停止作答 -->
+<div class="card screen" id="movedScreen">
+  <div class="stop-note">
+    <h2>这台设备已停止作答</h2>
+    <p id="movedText">你的学号已在另一台设备进入本场考试，作答改由那台设备继续。<br>这台设备之后的作答不会被记录。如有疑问请告知监考老师。</p>
+  </div>
+  <button class="btn btn-outline" style="width:100%;margin-top:16px" onclick="logout()">返回</button>
 </div>
 
 <script>
@@ -379,15 +436,36 @@ async function loadDepartments() {
 }
 
 let currentStudent = null;
-let examToken      = '';   // 发题时由后端配发，交卷时带回验证
+let examToken      = '';   // 发题时由后端配发，存档／监考上报／交卷时带回验证
 let questions      = [];
 let answers        = {};
 let currentIdx     = 0;
 let examEnded      = false;   // 时间到之后锁定作答，避免逾时又交卷失败时继续改答案
+let submitting     = false;   // 交卷请求进行中（防重复送出）
 let timerInterval  = null;
 const EXAM_SECONDS = 60 * 60;
 let examDeadline   = 0;            // 交卷时刻（epoch 毫秒），倒数一律以此回推
 let secondsLeft    = EXAM_SECONDS; // 仅供显示与计算作答秒数，实际时限看 examDeadline
+let issuedAt       = 0;            // 发卷时刻（浮水印显示用）
+
+// 监考统计：切屏 blur／失焦 focus（悬浮窗、圈选搜索、分屏）／网页翻译 translate，三种分开计次
+let proctor = { blur: 0, blurSec: 0, focus: 0, focusSec: 0, translate: 0 };
+// 监考上限：任一种「超过」就违规收卷。发卷时由后端下发（code.gs 的 PROCTOR_LIMITS），这里是备援预设值；
+// 后端收到上报也会用同一组再判一次，改前端程式躲不掉
+let LIMITS = { blur: 2, focus: 2, translate: 2 };
+const KIND_NAME = { blur: '切屏', focus: '失焦', translate: '网页翻译' };
+
+// 设备识别：同一学号换到另一台设备进入时，后端改认新设备、旧设备停止作答（换设备会被记录）
+const DEVICE_ID = (() => {
+  const make = () => (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : Date.now().toString(36) + Math.random().toString(36).slice(2);
+  try {
+    let v = localStorage.getItem('cic_device');
+    if (!v) { v = make(); localStorage.setItem('cic_device', v); }
+    return v;
+  } catch (e) { return make(); }
+})();
 
 // ── 画面切换 ──
 function showScreen(id) {
@@ -396,14 +474,20 @@ function showScreen(id) {
   window.scrollTo(0, 0);
 }
 
+const isTaking = () => !!examToken && !examEnded && !submitting &&
+  document.getElementById('examScreen').classList.contains('active');
+
 // ── 登录并直接开始考试 ──
 async function handleLogin() {
   const id   = document.getElementById('studentIdInput').value.trim();
   const name = document.getElementById('studentNameInput').value.trim();
   const dept = document.getElementById('studentDeptInput').value;
+  const needCode = document.getElementById('entryCodeGroup').style.display !== 'none';
+  const entryCode = document.getElementById('entryCodeInput').value.trim();
   if (!id)   return showError('loginError', '请输入学号');
   if (!name) return showError('loginError', '请输入姓名');
   if (!dept) return showError('loginError', '请选择科系');
+  if (needCode && !entryCode) return showError('loginError', '请输入教室屏幕上的进场码');
 
   document.getElementById('loginError').style.display = 'none';
   const btn = document.getElementById('loginBtn');
@@ -411,30 +495,53 @@ async function handleLogin() {
 
   try {
     const examPw = document.getElementById('examPwInput').value.trim();
-    const res = await api('GET', { action: 'getQuestions', password: examPw, studentId: id });
-    if (!res.success) { showError('loginError', res.error || '无法获取题目'); return; }
+    const res = await api('POST', {
+      action: 'startExam', studentId: id, name, dept,
+      password: examPw, entryCode, deviceId: DEVICE_ID
+    });
+    if (!res.success) {
+      // 老师在学生打开页面后才设密码／开进场码：把对应栏位补出来
+      if (res.needPassword)  document.getElementById('examPwGroup').style.display = 'block';
+      if (res.needEntryCode) document.getElementById('entryCodeGroup').style.display = 'block';
+      showError('loginError', res.error || '无法获取题目');
+      return;
+    }
     if (!Array.isArray(res.questions) || !res.questions.length) {
       showError('loginError', '题库为空或数据异常，请联系监考老师');
       return;
     }
-
-    currentStudent = { studentId: id, name, dept };
-    examToken   = res.examToken || '';
-    questions   = res.questions;
-    answers     = {};
-    currentIdx  = 0;
-    examEnded   = false;
-    secondsLeft = EXAM_SECONDS;
-    resetSubmitBtn();            // 同一分页连考第二场时，把上一场残留的「提交中…」按钮状态复原
-    renderQuestion();
-    startTimer();
-    saveExamState();
-    showScreen('examScreen');
+    beginExam(res, { studentId: id, name: res.name || name, dept });
   } catch (e) {
     showError('loginError', '连线失败，请稍后再试');
   } finally {
     btn.disabled = false; btn.textContent = '开始考试';
+    document.getElementById('entryCodeInput').value = '';   // 进场码 30 秒就换，用过即清
   }
+}
+
+// 进入作答：新卷与「重新进入同一份卷」（后端回传 resumed）共用
+function beginExam(res, student) {
+  currentStudent = student;
+  examToken   = res.examToken || '';
+  questions   = res.questions;
+  answers     = res.answers || {};
+  proctor     = Object.assign({ blur: 0, blurSec: 0, focus: 0, focusSec: 0, translate: 0 }, res.proctor || {});
+  if (res.limits) LIMITS = Object.assign({}, LIMITS, res.limits);
+  issuedAt    = res.issuedAt || Date.now();
+  examEnded   = false;
+  submitting  = false;
+  // 重新进入：从第一题没答的开始
+  const firstOpen = questions.findIndex(q => !answers[q.questionId]);
+  currentIdx  = res.resumed && firstOpen > 0 ? firstOpen : 0;
+  secondsLeft = EXAM_SECONDS;
+  resetSubmitBtn();            // 同一分页连考第二场时，把上一场残留的「提交中…」按钮状态复原
+  showScreen('examScreen');
+  renderQuestion();
+  // 截止时刻以伺服器算的剩余毫秒换算成本机时刻，学生手机时钟不准也不影响
+  startTimer(Date.now() + (Number(res.remainingMs) || EXAM_SECONDS * 1000));
+  startProctor();
+  saveExamState();
+  if (res.resumed) showToast('已恢复你在本场考试的作答进度，剩余时间照原本计算。', 'info');
 }
 
 // 把交卷按钮与未作答提醒复原成开考前的初始状态（避免上一场的 disabled／改写过的 onclick 卡住下一场）
@@ -464,6 +571,7 @@ document.getElementById('studentIdInput').addEventListener('keydown', e => {
 });
 document.getElementById('studentNameInput').addEventListener('keydown', onEnterLogin);
 document.getElementById('examPwInput').addEventListener('keydown', onEnterLogin);
+document.getElementById('entryCodeInput').addEventListener('keydown', onEnterLogin);
 
 // ── 题目渲染 ──
 function renderQuestion() {
@@ -474,6 +582,7 @@ function renderQuestion() {
   document.getElementById('progressText').textContent = `第 ${num} 题，共 ${questions.length} 题`;
   document.getElementById('progressBar').style.width = (num / questions.length * 100) + '%';
 
+  xlateBusy = true;   // 换题是我们自己改 DOM，不算翻译
   document.getElementById('questionContainer').innerHTML = `
     <div class="question-card">
       <div class="question-text">
@@ -488,6 +597,8 @@ function renderQuestion() {
         `).join('')}
       </div>
     </div>`;
+  snapshotQuestion();
+  setTimeout(() => { xlateBusy = false; }, 0);
 
   document.getElementById('prevBtn').style.visibility = currentIdx === 0 ? 'hidden' : 'visible';
   document.getElementById('nextBtn').style.display    = currentIdx < questions.length - 1 ? '' : 'none';
@@ -497,11 +608,13 @@ function renderQuestion() {
 }
 
 function selectAnswer(qid, key, el) {
-  if (examEnded) return;   // 时间已到，锁定作答（仅允许重试交卷）
+  if (examEnded || submitting) return;   // 时间已到或交卷中，锁定作答（仅允许重试交卷）
+  const changed = answers[qid] !== key;
   answers[qid] = key;
   document.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
   el.closest('.option')?.classList.add('selected');
   saveExamState();
+  if (changed) scheduleSave();
   renderNavigator();   // 作答后即时更新总览的已答数与颜色
 }
 
@@ -565,7 +678,7 @@ function tickTimer() {
     el.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
     el.className = 'timer' + (secondsLeft <= 300 ? ' danger' : secondsLeft <= 600 ? ' warning' : '');
   }
-  if (secondsLeft <= 0) { examEnded = true; stopTimer(); submitExamData(); }
+  if (secondsLeft <= 0) { examEnded = true; stopTimer(); submitExamData('timeup'); }
 }
 
 function stopTimer() {
@@ -588,29 +701,38 @@ function handleSubmit() {
   submitExamData();
 }
 
-async function submitExamData() {
+// reason：undefined＝学生自己交卷；'timeup'＝时间到；'blur'/'focus'/'translate'＝该项超过上限违规收卷
+async function submitExamData(reason) {
+  if (submitting) return;
+  submitting = true;
   stopTimer();
+  clearTimeout(saveTimer); saveTimer = 0;
   const timeTaken = EXAM_SECONDS - secondsLeft;
   const btn = document.getElementById('submitBtn');
   btn.disabled = true; btn.textContent = '提交中…';
 
   try {
-    const res = await api('POST', {
+    const res = await api('POST', Object.assign({
       action    : 'submitExam',
       studentId : currentStudent.studentId,
       name      : currentStudent.name,
       dept      : currentStudent.dept,
       examToken,
+      deviceId  : DEVICE_ID,
+      reason    : reason || '',
       answers,
       timeTaken
-    });
+    }, proctorPayload()));
+    if (res.moved) { movedAway(); return; }
     if (!res.success) {
+      submitting = false;
       alert(res.error || '提交失败');
       restoreSubmitBtn(btn);
       return;
     }
     showResult(res);
   } catch (e) {
+    submitting = false;
     alert(e && e.name === 'AbortError'
       ? '提交逾时，答案未送出，请再按一次「交卷」重试'
       : '连线失败，答案未送出，请再按一次「交卷」重试');
@@ -623,18 +745,104 @@ function restoreSubmitBtn(btn) {
   btn.disabled = false;
   btn.textContent = '交卷';
   btn.style.display = '';
-  btn.onclick = () => submitExamData();
+  btn.onclick = () => submitExamData(examEnded ? 'timeup' : undefined);
+}
+
+// ── 存档到伺服器（防关掉浏览器／没电／换设备全失）──────────
+// 答案有变动时，最多每 15 秒送一次整份答案到 GAS（存在 CacheService）。
+// 用处：重新进入时还原答案；时间到没交卷，系统用这份存档自动收卷；老师强制收卷也用这份。
+// 不每选一题就送：全班同时作答时 GAS 会排队、碰到同时执行上限。
+const SAVE_DELAY_MS = 15000;
+let saveTimer = 0, saveDirty = false, saveInFlight = false;
+
+function scheduleSave() {
+  saveDirty = true;
+  if (!saveTimer) saveTimer = setTimeout(flushSave, SAVE_DELAY_MS);
+}
+
+async function flushSave() {
+  clearTimeout(saveTimer); saveTimer = 0;
+  if (!saveDirty || !isTaking()) return;
+  if (saveInFlight) { saveTimer = setTimeout(flushSave, 3000); return; }
+  saveInFlight = true; saveDirty = false;
+  try {
+    const res = await api('POST', {
+      action: 'saveAnswers', examToken, studentId: currentStudent.studentId,
+      deviceId: DEVICE_ID, answers
+    }, 20000);
+    if (handleServerState(res)) return;
+    if (!res.success && !res.expired) saveDirty = true;   // 下次再送整份
+  } catch (e) {
+    saveDirty = true;   // 存档失败不打扰学生：下次再送，交卷时也会送整份
+  } finally {
+    saveInFlight = false;
+  }
+  if (saveDirty && !saveTimer && isTaking()) saveTimer = setTimeout(flushSave, SAVE_DELAY_MS);
+}
+
+// 存档回应若表示「已在别台设备进入」或「已被收卷」，就地结束本机作答
+function handleServerState(res) {
+  if (!res) return false;
+  if (res.moved) { movedAway(); return true; }
+  if (res.submitted && res.result) { examEnded = true; showResult(res.result); return true; }
+  return false;
+}
+
+// 页面隐藏（切走、可能就此关掉）时用 keepalive 送出：页面卸载后请求仍会送达。
+// mode:'no-cors' 拿不到回应，只用在「送出就好」的场合
+function beacon(params) {
+  try {
+    fetch(GAS_URL, { method: 'POST', body: JSON.stringify(params), keepalive: true, mode: 'no-cors' });
+  } catch (e) {}
+}
+
+function proctorPayload() {
+  return {
+    blurCount: proctor.blur, blurSeconds: Math.round(proctor.blurSec),
+    focusLossCount: proctor.focus, focusLossSeconds: Math.round(proctor.focusSec),
+    translateCount: proctor.translate
+  };
+}
+
+// 监考讯号即时上报：监考页在交卷前就看得到；后端一律取较大值，送小的洗不掉记录。
+// back=true 表示「刚切回来」，后端据此记下回来时刻，用来对照「回来后马上连答」
+function reportProctor(back) {
+  if (!examToken) return;
+  beacon(Object.assign({
+    action: 'reportProctor', examToken, studentId: currentStudent.studentId,
+    deviceId: DEVICE_ID, back: !!back
+  }, proctorPayload()));
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden || !isTaking() || !saveDirty) return;
+  clearTimeout(saveTimer); saveTimer = 0;
+  saveDirty = false;
+  beacon({ action: 'saveAnswers', examToken, studentId: currentStudent.studentId, deviceId: DEVICE_ID, answers });
+});
+
+// 同一学号在另一台设备进入本场：这台设备停止作答
+function movedAway() {
+  examEnded = true;
+  stopTimer();
+  clearTimeout(saveTimer); saveTimer = 0;
+  stopProctor();
+  clearExamState();
+  examToken = ''; answers = {};
+  showScreen('movedScreen');
 }
 
 // ── 作答暂存（防刷新／误关全失）──────────────────
 // 考试进行中把状态写入 sessionStorage；页面重新载入时若暂存未过期即自动复原。
 // 用 sessionStorage 而非 localStorage：关掉分页即清除，不会把答案留在共用电脑上。
+// （关掉分页后要回来，就重新登记：后端会认出同一学号、还原同一份卷子与伺服器上的存档）
 const EXAM_STATE_KEY = 'cic_exam_state';
 
 function saveExamState() {
   try {
     sessionStorage.setItem(EXAM_STATE_KEY, JSON.stringify({
-      currentStudent, examToken, questions, answers, currentIdx, examDeadline
+      currentStudent, examToken, questions, answers, currentIdx, examDeadline,
+      issuedAt, proctor, LIMITS
     }));
   } catch (e) { /* 隐私模式或容量满：不阻断考试 */ }
 }
@@ -653,11 +861,18 @@ function restoreExamState() {
   questions      = s.questions;
   answers        = s.answers || {};
   currentIdx     = Math.min(s.currentIdx || 0, questions.length - 1);
+  issuedAt       = s.issuedAt || Date.now();
+  if (s.proctor) proctor = s.proctor;   // 刷新不会把切屏次数归零
+  if (s.LIMITS)  LIMITS  = s.LIMITS;
   examEnded      = false;
+  submitting     = false;
   resetSubmitBtn();
+  showScreen('examScreen');
   renderQuestion();
   startTimer(s.examDeadline);   // 沿用原截止时刻
-  showScreen('examScreen');
+  startProctor();
+  // 立刻跟伺服器对一次：同步答案，也顺便得知是否已被收卷／已在别台设备进入
+  saveDirty = true; flushSave();
   return true;
 }
 
@@ -669,7 +884,28 @@ window.addEventListener('beforeunload', e => {
   }
 });
 
+const VIOLATION_MSG = {
+  blur     : () => `切屏（切到别的 App 或分页）超过 ${LIMITS.blur} 次`,
+  focus    : () => `考试画面被覆盖或缩小（悬浮窗、圈选搜索、分屏）超过 ${LIMITS.focus} 次`,
+  translate: () => `使用网页翻译超过 ${LIMITS.translate} 次`
+};
+
+// 成绩页的收卷说明（学生自己交卷时不显示）
+function resultNoteText(res) {
+  switch (res.mode) {
+    case 'violation': return `${(VIOLATION_MSG[res.violation] || (() => '违反考试规定'))()}，系统已收卷。已作答的题目照常计分。`;
+    case 'forced'   : return '监考老师已将你的考卷收回。已作答的题目照常计分。';
+    case 'overdue'  : return '考试时间已过，系统已按你最后一次存档的答案自动交卷。';
+    case 'timeup'   : return '考试时间到，系统已自动交卷。';
+    default         : return '';
+  }
+}
+
 function showResult(res) {
+  examEnded = true;
+  stopTimer();
+  clearTimeout(saveTimer); saveTimer = 0;
+  stopProctor();
   clearExamState();
   examToken = ''; answers = {};   // 交卷成功即清理凭证与答案，结果画面不留残state
   const circle = document.getElementById('scoreCircle');
@@ -678,6 +914,9 @@ function showResult(res) {
   document.getElementById('resultLabel').textContent = res.passed ? '恭喜，考试通过！' : '本次未通过';
   document.getElementById('resultDetail').textContent =
     `答对 ${res.correct} 题 / 共 ${res.total} 题`;
+  const note = resultNoteText(res);
+  const noteEl = document.getElementById('resultNote');
+  noteEl.textContent = note; noteEl.hidden = !note;
   document.getElementById('resultId').textContent   = currentStudent.studentId;
   document.getElementById('resultName').textContent = currentStudent.name;
   document.getElementById('resultDept').textContent = currentStudent.dept;
@@ -689,13 +928,261 @@ function logout() {
   currentStudent = null;
   examToken = '';
   questions = []; answers = {}; currentIdx = 0;
+  examEnded = false; submitting = false;
   stopTimer();
+  clearTimeout(saveTimer); saveTimer = 0; saveDirty = false;
+  stopProctor();
   resetSubmitBtn();
+  document.getElementById('resultNote').hidden = true;
   document.getElementById('studentIdInput').value = '';
   document.getElementById('studentNameInput').value = '';
   document.getElementById('studentDeptInput').value = '';
   document.getElementById('loginError').style.display = 'none';
   showScreen('loginScreen');
+}
+
+// ════════════════════════════════════════════════
+// 防作弊：浮水印／禁止复制／切屏／失焦／分屏／网页翻译
+// ════════════════════════════════════════════════
+function startProctor() {
+  document.body.classList.add('taking');
+  setWatermark(currentStudent.studentId, currentStudent.name, issuedAt);
+  document.getElementById('xlateBar').hidden = true;
+  awayCounted = focusCounted = splitActive = splitCounted = false;
+  watchTranslation();
+  startViewWatch();
+}
+
+function stopProctor() {
+  document.body.classList.remove('taking');
+  if (xlateObserver) xlateObserver.disconnect();
+  clearInterval(xlateBackstop);
+  clearTimeout(focusCountTimer);
+  document.getElementById('xlateBar').hidden = true;
+  document.getElementById('warnToast').hidden = true;
+}
+
+// 浮水印：一格 SVG 斜写两行（学号 · 姓名／发卷日期时间），背景重复铺满。颜色很淡，读题不受影响。
+// 当背景图的 SVG 载不到网页字体，所以直接用系统字体
+function setWatermark(sid, name, when) {
+  const x = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const d = new Date(when || Date.now()), p = n => String(n).padStart(2, '0');
+  const stamp = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="260" height="170">`
+    + `<g transform="rotate(-24 130 85)" fill="rgba(105,27,255,.10)" font-family="Arial, Helvetica, PingFang SC, Microsoft YaHei, Noto Sans SC, sans-serif" text-anchor="middle">`
+    + `<text x="130" y="80" font-size="17" font-weight="600">${x(sid)} · ${x(name)}</text>`
+    + `<text x="130" y="102" font-size="12">${x(stamp)}</text></g></svg>`;
+  document.getElementById('watermark').style.backgroundImage =
+    `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}")`;
+}
+
+// 防复制：挡「复制题目→贴进在线翻译／字典」这条最快的路（挡不了拍照，作用是提高门槛）
+['copy', 'cut', 'contextmenu'].forEach(ev =>
+  document.addEventListener(ev, e => { if (isTaking()) e.preventDefault(); }));
+
+let toastTimer = 0;
+function showToast(html, kind) {
+  const t = document.getElementById('warnToast');
+  t.innerHTML = (kind === 'info' ? '' : '⚠ ') + html;
+  t.style.background = kind === 'info' ? 'var(--primary-dark)' : '';
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 5000);
+}
+
+const IS_TOUCH = matchMedia('(pointer: coarse)').matches;
+// 「正在进行、已经算过一次」的离开：悬浮窗失焦或分屏期间又切出 App，同一次离开不重复计次
+let awayCounted = false;
+let blurAwayAt = 0, focusAwayAt = 0;
+
+/** 记一次：kind＝blur（切屏）或 focus（失焦）。超过上限当下就违规交卷，回传 true */
+function countAway(kind) {
+  proctor[kind]++;
+  saveExamState();
+  reportProctor(false);   // 即时上报：监考页在交卷前就看得到
+  if (proctor[kind] > LIMITS[kind]) { submitExamData(kind); return true; }
+  return false;
+}
+function awayToast(kind, what) {
+  const n = proctor[kind];
+  showToast(`${what}已记录${KIND_NAME[kind]} ${n} / ${LIMITS[kind]} 次，`
+    + (n >= LIMITS[kind] ? '<b>再一次就会被收卷</b>' : `超过 ${LIMITS[kind]} 次将被收卷`));
+}
+
+// ── 切屏：切 App／切分页／锁屏 ──
+document.addEventListener('visibilitychange', () => {
+  if (!isTaking()) return;
+  if (document.hidden) {
+    blurAwayAt = Date.now();
+    if (!awayCounted) countAway('blur');
+  } else {
+    if (!blurAwayAt) return;   // 没有真正离开过（可见性事件抖动）就不提示
+    proctor.blurSec += (Date.now() - blurAwayAt) / 1000;
+    blurAwayAt = 0;
+    saveExamState();
+    reportProctor(true);
+    if (isTaking()) awayToast('blur', '');
+  }
+});
+
+// ── 视窗失焦：画面还在、却失去焦点 ──
+// 手机上几乎只有一种情况：被盖住了 —— Android「圈选搜索」、Google 翻译悬浮球、Lens、分屏／弹出视窗。
+// 这些工具是截图读字，不改网页也不切走页面，切屏与翻译侦测都抓不到。
+// 失焦持续超过门槛（手机 2 秒、电脑 5 秒）才记一次；短暂失焦（下拉通知栏、点网址列）不记次也不记秒数。
+const FOCUS_COUNT_MS = IS_TOUCH ? 2000 : 5000;
+let focusCountTimer = 0, focusCounted = false;
+window.addEventListener('blur', () => {
+  if (!isTaking() || focusAwayAt) return;
+  // 等一下再判：手机切 App 也会先失焦，那种已经由切屏侦测记过，不要重复计
+  setTimeout(() => {
+    if (document.hidden || document.hasFocus() || !isTaking() || focusAwayAt) return;
+    focusAwayAt = Date.now();
+    clearTimeout(focusCountTimer);
+    focusCountTimer = setTimeout(() => {
+      if (!focusAwayAt || document.hidden || document.hasFocus() || !isTaking() || awayCounted) return;
+      awayCounted = focusCounted = true;
+      countAway('focus');
+    }, FOCUS_COUNT_MS);
+  }, 400);
+});
+window.addEventListener('focus', () => {
+  clearTimeout(focusCountTimer);
+  if (!focusAwayAt) return;
+  const secs = (Date.now() - focusAwayAt) / 1000;
+  focusAwayAt = 0;
+  if (focusCounted) {
+    proctor.focusSec += secs;   // 只累计有算次的那几次
+    focusCounted = false;
+    if (!splitActive) awayCounted = false;
+    saveExamState();
+    reportProctor(true);
+    if (isTaking()) awayToast('focus', '侦测到考试画面被其他程序覆盖（圈选搜索、悬浮窗等），');
+  }
+});
+
+// ── 分屏／悬浮视窗：作答画面突然变小 ──
+// 作答页没有输入框、不会跳键盘，所以画面明显缩小几乎就是开了分屏、弹出视窗，或电脑把视窗缩小并排。
+// 比的是「实体像素」（CSS 尺寸 × devicePixelRatio）：浏览器缩放不误判；旋转手机重取基准、不计次。
+const SHRINK = 0.75;
+let viewBase = null, splitActive = false, splitCounted = false, splitAt = 0, resizeTimer = 0;
+const viewNow = () => {
+  const dpr = window.devicePixelRatio || 1;
+  const w = document.documentElement.clientWidth, h = document.documentElement.clientHeight;
+  return { w: Math.round(w * dpr), h: Math.round(h * dpr), land: w > h, cssW: w };
+};
+function startViewWatch() {
+  viewBase = viewNow();
+  // 手机一进来就已经是分屏：跟整个萤幕比，宽度不到 75% 就当作分屏中
+  if (IS_TOUCH && screen.width && screen.height) {
+    const sw = viewBase.land ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+    if (viewBase.cssW < sw * SHRINK) enterSplit();
+  }
+}
+function enterSplit() {
+  if (splitActive || !isTaking()) return;
+  splitActive = true;
+  splitAt = Date.now();
+  if (awayCounted) return;      // 正在失焦计次中，同一次离开不重复算
+  awayCounted = splitCounted = true;
+  if (countAway('focus')) return;
+  awayToast('focus', '侦测到分屏或悬浮视窗，请恢复全屏作答。');
+}
+function leaveSplit() {
+  if (!splitActive) return;
+  splitActive = false;
+  if (splitCounted) {
+    proctor.focusSec += (Date.now() - splitAt) / 1000;
+    saveExamState();
+    reportProctor(true);
+  }
+  splitCounted = false;
+  if (!focusCounted) awayCounted = false;
+}
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (!isTaking() || !viewBase) return;
+    const v = viewNow();
+    if (v.land !== viewBase.land) {
+      viewBase = v;               // 旋转：新基准
+      if (splitActive) leaveSplit();
+      return;
+    }
+    if (v.w < viewBase.w * SHRINK || v.h < viewBase.h * SHRINK) return enterSplit();
+    if (v.w >= viewBase.w * 0.9 && v.h >= viewBase.h * 0.9) leaveSplit();
+    // 变大（例如工具列收起）：基准取看过的最大值
+    if (v.w > viewBase.w || v.h > viewBase.h)
+      viewBase = Object.assign({}, viewBase, { w: Math.max(v.w, viewBase.w), h: Math.max(v.h, viewBase.h) });
+  }, 500);
+});
+
+// ── 网页翻译：抓到就把题目还原成英文 ──
+// 浏览器内建翻译是「原地改 DOM」——不切分页、不触发任何事件，切屏侦测完全抓不到。四件事都做：
+//   挡（translate=no）→ 抓（三个讯号）→ 还原（改回原文）→ 回报（监考页看得到）。
+const XLATE_RESTORE_MS = 2000;   // 还原节流：翻译引擎会跟着重译，别让两边无限来回
+const XLATE_COUNT_MS   = 15000;  // 计次节流：翻译开着就会一直被重译，改成 15 秒记一次
+let xlateSnapshot = [], xlateObserver = null, xlateBackstop = 0, xlateDebounce = 0;
+let xlateBusy = false, xlateLastRestore = 0, xlateLastCount = 0;
+
+// 每次换题都重拍快照（一次只显示一题，题目区会整个重画）
+function snapshotQuestion() {
+  const root = document.getElementById('questionContainer');
+  xlateSnapshot = [...root.querySelectorAll('.question-text, .option span')]
+    .map(el => ({ el, html: el.innerHTML, text: el.textContent }));
+}
+
+function watchTranslation() {
+  const root = document.getElementById('questionContainer');
+  if (xlateObserver) xlateObserver.disconnect();
+  xlateObserver = new MutationObserver(() => {
+    if (xlateBusy) return;                       // 忽略我们自己的换题与还原动作
+    clearTimeout(xlateDebounce);
+    xlateDebounce = setTimeout(checkTranslation, 200);
+  });
+  xlateObserver.observe(root, { childList: true, subtree: true, characterData: true,
+    attributes: true, attributeFilter: ['_msttexthash', '_msthash'] });
+  clearInterval(xlateBackstop);
+  xlateBackstop = setInterval(checkTranslation, 4000);   // 观察器漏接时的保底
+}
+
+// 三个讯号任一成立就算被翻译：
+//   Chrome／Google 翻译把译文包进 <font>；Edge 的 Microsoft 翻译在原节点补 _msttexthash 属性；
+//   其余（Safari、翻译外挂）靠「文字和渲染当下的快照不符」抓出来 —— 我们自己除了换题从不改题目文字。
+function translationDetected() {
+  const root = document.getElementById('questionContainer');
+  if (!root || !xlateSnapshot.length) return false;
+  if (root.querySelector('font, [_msttexthash], [_msthash]')) return true;
+  return xlateSnapshot.some(x => x.el.isConnected && x.el.textContent !== x.text);
+}
+
+function checkTranslation() {
+  if (!isTaking() || !translationDetected()) return;
+  const now = Date.now();
+  if (now - xlateLastRestore >= XLATE_RESTORE_MS) {
+    xlateLastRestore = now;
+    xlateBusy = true;
+    xlateSnapshot.forEach(x => { if (x.el.isConnected && x.el.textContent !== x.text) x.el.innerHTML = x.html; });
+    // 连翻译引擎留下的痕迹一起清掉，否则侦测讯号会一直成立、次数无限累加
+    const root = document.getElementById('questionContainer');
+    root.querySelectorAll('[_msttexthash], [_msthash]').forEach(el => {
+      el.removeAttribute('_msttexthash'); el.removeAttribute('_msthash');
+    });
+    root.querySelectorAll('font').forEach(f => f.replaceWith(...f.childNodes));
+    setTimeout(() => { xlateBusy = false; }, 300);
+  }
+  if (now - xlateLastCount < XLATE_COUNT_MS) return;
+  xlateLastCount = now;
+  proctor.translate++;
+  saveExamState();
+  reportProctor(false);
+  if (proctor.translate > LIMITS.translate) { submitExamData('translate'); return; }
+  const bar = document.getElementById('xlateBar');
+  bar.innerHTML = '⚠ 侦测到浏览器的网页翻译，题目已还原成英文，'
+    + `此事件已回报监考老师（${proctor.translate} / ${LIMITS.translate} 次，`
+    + (proctor.translate >= LIMITS.translate ? '<b>再一次就会被收卷</b>' : `超过 ${LIMITS.translate} 次将被收卷`) + '）。<br>'
+    + '请关闭翻译功能再继续作答：Chrome／Edge 点网址列右侧的翻译图示选「显示原文」，'
+    + 'Safari 点 <b>ぁあ</b> 选「显示原文」。';
+  bar.hidden = false;
 }
 
 // ── API 工具 ──
@@ -739,8 +1226,9 @@ async function loadExamStatus() {
       statusAlert.style.display = 'block';
       btn.disabled    = true;
       btn.textContent = '考试未开放';
-    } else if (res.hasPassword) {
-      pwGroup.style.display = 'block';
+    } else {
+      if (res.hasPassword) pwGroup.style.display = 'block';
+      if (res.entryCode)   document.getElementById('entryCodeGroup').style.display = 'block';
     }
   } catch (e) {
     // 连线失败时不阻止考试

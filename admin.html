@@ -231,6 +231,39 @@
 
   .stats-grid { grid-template-columns: repeat(4, 1fr); }
 
+  /* ── 考试控制：进场防护开关 ── */
+  .hint { font-size:.78rem; color:var(--gray-500); }
+  .guard-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:12px;
+    padding-top:12px; border-top:1px dashed var(--gray-200); }
+  .switch-label { display:flex; align-items:center; gap:8px; font-size:.87rem; font-weight:600;
+    color:var(--gray-700); cursor:pointer; }
+  .switch-label input { width:16px; height:16px; accent-color:var(--primary); }
+
+  /* ── 监考：次数达上限黄字、超过红字 ── */
+  .cnt-warn { color:var(--warning); font-weight:700; }
+  .cnt-over { color:var(--danger);  font-weight:700; }
+  .sub-title { font-size:.92rem; font-weight:700; color:var(--gray-700); margin:6px 0 8px; }
+  #liveStats { grid-template-columns: repeat(5, 1fr); }
+  #liveTable td, #liveInProgress td { white-space:nowrap; }
+  #liveTable td.pace-cell, #liveInProgress td.pace-cell { white-space:normal; min-width:150px; }
+  .live-block { margin-bottom:20px; }
+  .roster-chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .roster-chips span { background:var(--gray-100); color:var(--gray-700); border-radius:99px;
+    padding:3px 10px; font-size:.8rem; }
+
+  /* ── 投影进场码（满版） ── */
+  #entryOverlay { position:fixed; inset:0; z-index:300; display:none;
+    background:linear-gradient(135deg,var(--primary-dark),var(--primary)); color:#fff;
+    flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px; }
+  #entryOverlay.open { display:flex; }
+  #entryOverlay .eo-label { font-size:clamp(1.2rem,3vw,2rem); font-weight:600; opacity:.9; }
+  #entryOverlay .eo-code { font-size:clamp(5rem,22vw,16rem); font-weight:800; letter-spacing:.12em;
+    font-variant-numeric:tabular-nums; line-height:1.1; margin:12px 0; }
+  #entryOverlay .eo-bar { width:min(520px,80vw); height:10px; border-radius:99px; background:rgba(255,255,255,.25); overflow:hidden; }
+  #entryOverlay .eo-bar div { height:100%; background:#fff; transition:width .9s linear; }
+  #entryOverlay .eo-hint { margin-top:14px; font-size:clamp(.95rem,2vw,1.3rem); opacity:.85; }
+  #entryOverlay .eo-close { position:absolute; top:18px; right:18px; }
+
   /* 桌面版增强 */
   table { font-size:.88rem; }
   thead th { padding:12px 14px; }
@@ -238,7 +271,7 @@
 
   @media(max-width:900px){
     .content{ padding:20px 16px; }
-    .stats-grid{ grid-template-columns: repeat(2, 1fr); }
+    .stats-grid, #liveStats{ grid-template-columns: repeat(2, 1fr); }
     .search-bar input { max-width:100%; }
   }
   @media(max-width:600px){
@@ -337,6 +370,21 @@
           <button class="btn btn-outline btn-sm" onclick="openSetExamPasswordModal()">修改密码</button>
           <button class="btn btn-sm btn-outline" id="examToggleBtn" onclick="toggleExam()">—</button>
         </div>
+        <!-- 进场防护：两项都是开考前设定，学生下一次按「开始考试」即生效 -->
+        <div class="guard-row">
+          <label class="switch-label">
+            <input type="checkbox" id="entryCodeSwitch" onchange="setGuard('entryCode', this.checked)">
+            轮换进场码 <span class="hint">（学生要输入教室屏幕上的 4 位数，每 30 秒更换）</span>
+          </label>
+          <button class="btn btn-outline btn-sm" onclick="openEntryCode()">投影进场码</button>
+        </div>
+        <div class="guard-row">
+          <label class="switch-label">
+            <input type="checkbox" id="rosterSwitch" onchange="setGuard('roster', this.checked)">
+            限定名册 <span class="hint" id="rosterHint">（只有 Sheets「名册」分页上的学号与姓名能进场）</span>
+          </label>
+        </div>
+        <p class="hint" id="autoCollectHint" style="margin-top:10px"></p>
       </div>
       <div class="card">
         <div id="studentsToolbar">
@@ -358,16 +406,22 @@
     <div class="panel" id="panel-live">
       <div class="card">
         <div class="search-bar">
-          <div class="card-title">本场监考</div>
+          <div class="card-title" style="margin-bottom:0">监考</div>
+          <select id="liveSession" onchange="loadLive()" style="width:auto;max-width:320px" aria-label="场次"></select>
           <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;color:var(--gray-600);white-space:nowrap">
             <input type="checkbox" id="liveAuto" onchange="toggleLiveAuto()"> 每 30 秒自动刷新
           </label>
           <button class="btn btn-outline" onclick="loadLive()">刷新</button>
+          <button class="btn btn-outline" id="liveEntryBtn" onclick="openEntryCode()">投影进场码</button>
         </div>
-        <p style="font-size:.78rem;color:var(--gray-500);margin:-4px 0 12px">「本场」＝自最近一次「开放考试」起的交卷记录。关闭再开放即开启新一场。</p>
+        <p class="hint" style="margin:-4px 0 12px">「本场」＝自最近一次「开放考试」起。关闭再开放即开启新一场；旧场次可从选单切换查看与导出。
+          切屏／失焦／网页翻译任一项超过上限（<span id="liveLimits">2 次</span>）系统自动收卷，成绩照常计分。</p>
         <div class="stats-grid" id="liveStats"></div>
         <div id="liveAlert"></div>
+        <div id="liveInProgress"></div>
+        <div id="liveRoster"></div>
         <div class="table-wrap" id="liveTable"><p style="color:var(--gray-500);font-size:.88rem">点「刷新」载入本场数据…</p></div>
+        <div id="liveFooter" style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end"></div>
       </div>
     </div>
 
@@ -569,6 +623,15 @@
   </div>
 </div>
 
+<!-- ── 投影进场码（满版，给教室屏幕用）── -->
+<div id="entryOverlay" role="dialog" aria-label="投影进场码">
+  <button class="btn btn-ghost eo-close" onclick="closeEntryCode()">关闭 ✕</button>
+  <div class="eo-label">英文毕业考试 · 进场码</div>
+  <div class="eo-code" id="eoCode">····</div>
+  <div class="eo-bar"><div id="eoBar" style="width:100%"></div></div>
+  <div class="eo-hint" id="eoHint">在「开始考试」画面输入上方 4 位数，每 30 秒更换</div>
+</div>
+
 <!-- ── 学生详情 Modal ── -->
 <div class="modal-bg" id="studentDetailModal">
   <div class="modal">
@@ -594,7 +657,7 @@ let studentSort   = { key: '', dir: 1 };          // 排序状态：key=栏位�
 let studentFilter = { dept: '', status: '' };     // 栏位筛选：专业、状态
 let studentPage     = 1;                          // 学生总览目前页码（从 1 起）
 let studentPageSize = 50;                         // 每页笔数；0 = 全部
-let examConfig   = { open: true, password: '' };
+let examConfig   = { open: true, password: '', entryCode: false, roster: false };
 
 // ── 登入状态储存（localStorage：跨分页共用、回考试系统再回来不必重登）──
 // 用 localStorage 而非 sessionStorage，因为「管理员入口」在考试系统是开新分页，
@@ -690,7 +753,11 @@ function loadAllData() {
 async function loadExamConfig() {
   try {
     const res = await api('GET', { action: 'getExamConfig', token: session.token });
-    if (res.success) { examConfig = { open: res.open, password: res.password }; renderExamControl(); }
+    if (res.success) {
+      examConfig = { open: res.open, password: res.password, entryCode: !!res.entryCode,
+                     roster: !!res.roster, rosterCount: res.rosterCount || 0, autoCollect: !!res.autoCollect };
+      renderExamControl();
+    }
   } catch {}
 }
 
@@ -710,6 +777,69 @@ function renderExamControl() {
     btn.textContent   = '开放考试';
   }
   pwDisplay.textContent = examConfig.password || '（无密码）';
+  document.getElementById('entryCodeSwitch').checked = !!examConfig.entryCode;
+  document.getElementById('rosterSwitch').checked    = !!examConfig.roster;
+  document.getElementById('rosterHint').textContent =
+    `（只有 Sheets「名册」分页上的学号与姓名能进场；目前名册 ${examConfig.rosterCount || 0} 人）`;
+  const ac = document.getElementById('autoCollectHint');
+  ac.innerHTML = examConfig.autoCollect
+    ? '自动收卷排程：<span style="color:var(--success);font-weight:600">已启用</span>（逾时未交的考卷每分钟检查一次，以学生最后存档计分）'
+    : '自动收卷排程：<span style="color:var(--warning);font-weight:600">未启用</span>（监考页开着时仍会每 30 秒收一次；要全自动请在 Apps Script 编辑器执行一次 installAutoCollectTrigger）';
+}
+
+// 轮换进场码／限定名册开关
+async function setGuard(key, on) {
+  if (key === 'roster' && on && !examConfig.rosterCount) {
+    alert('「名册」分页目前没有任何学生，开启后没有人能进场。请先在 Google Sheets 的「名册」分页贴上学号与姓名（第一列标题：学号、姓名）。');
+    renderExamControl(); return;
+  }
+  try {
+    const res = await api('POST', { action: 'setExamConfig', token: session.token, [key]: on });
+    if (res.success) examConfig[key] = on;
+    else alert(res.error || '操作失败');
+  } catch { alert('连线失败'); }
+  renderExamControl();
+}
+
+// ── 投影进场码：满版显示，每 30 秒换码；倒数条跟着走 ──
+let entryTimer = null, entryDeadline = 0;
+async function openEntryCode() {
+  document.getElementById('entryOverlay').classList.add('open');
+  await refreshEntryCode();
+}
+async function refreshEntryCode() {
+  clearTimeout(entryTimer);
+  if (!document.getElementById('entryOverlay').classList.contains('open')) return;
+  try {
+    const res = await api('GET', { action: 'getEntryCode', token: session.token });
+    if (!res.success) { document.getElementById('eoHint').textContent = res.error || '读取失败'; return; }
+    if (!res.enabled || !res.open) {
+      document.getElementById('eoCode').textContent = '····';
+      document.getElementById('eoHint').textContent = !res.enabled
+        ? '尚未开启「轮换进场码」：请到「学生总览 › 考试控制」勾选'
+        : '考试目前关闭中，开放考试后才会显示进场码';
+      entryTimer = setTimeout(refreshEntryCode, 5000);
+      return;
+    }
+    markActivity();   // 投影中没人碰键盘滑鼠是正常的，不要因此闲置登出
+    document.getElementById('eoCode').textContent = res.code;
+    document.getElementById('eoHint').textContent = '在「开始考试」画面输入上方 4 位数，每 30 秒更换';
+    entryDeadline = Date.now() + res.msLeft;
+    tickEntryBar();
+    entryTimer = setTimeout(refreshEntryCode, res.msLeft + 300);
+  } catch {
+    document.getElementById('eoHint').textContent = '连线失败，5 秒后重试…';
+    entryTimer = setTimeout(refreshEntryCode, 5000);
+  }
+}
+function tickEntryBar() {
+  const left = Math.max(0, entryDeadline - Date.now());
+  document.getElementById('eoBar').style.width = (left / 30000 * 100) + '%';
+  if (left > 0 && document.getElementById('entryOverlay').classList.contains('open')) setTimeout(tickEntryBar, 1000);
+}
+function closeEntryCode() {
+  clearTimeout(entryTimer);
+  document.getElementById('entryOverlay').classList.remove('open');
 }
 
 async function toggleExam() {
@@ -718,7 +848,11 @@ async function toggleExam() {
   if (!confirm(msg)) return;
   try {
     const res = await api('POST', { action: 'setExamConfig', token: session.token, open: newOpen });
-    if (res.success) { examConfig.open = newOpen; renderExamControl(); }
+    if (res.success) {
+      examConfig.open = newOpen; renderExamControl();
+      liveSessionSel = '';            // 开／关考都可能换场次：监考页回到「本场」
+      if (liveLoaded) loadLive();
+    }
     else alert(res.error || '操作失败');
   } catch { alert('连线失败'); }
 }
@@ -806,34 +940,117 @@ let liveLoaded = false, analysisLoaded = false, adminlogLoaded = false;
 // 本场监考看板
 // ════════════════════════════════════════════════
 let liveTimer = null;
+let liveSessionSel = '';     // 目前选的场次（开始时刻）；空＝本场
+let liveData = null;         // 最近一次载入的监考资料（按钮以索引回查，不把资料塞进 onclick）
 async function loadLive() {
+  const sel = document.getElementById('liveSession');
+  if (sel && sel.options.length) liveSessionSel = sel.value;
   try {
-    const res = await api('GET', { action:'getLiveSession', token: session.token });
+    const res = await api('GET', { action:'getLiveSession', token: session.token, session: liveSessionSel || '' });
     if (!res.success) { showEl('liveAlert', res.error || '加载失败', 'error'); return; }
+    document.getElementById('liveAlert').innerHTML = '';
+    liveData = res;
     renderLive(res);
   } catch { showEl('liveAlert', '连线失败', 'error'); }
 }
 
+// 次数显示「n / 上限」：达上限黄字、超过红字
+function cntCell(n, limit, sec) {
+  if (n === '' || n === undefined || n === null) return '—';
+  const v = Number(n) || 0;
+  const cls = v > limit ? 'cnt-over' : (v === limit && v > 0 ? 'cnt-warn' : '');
+  const s = Number(sec) > 0 ? `<br><span class="hint">${esc(sec)} 秒</span>` : '';
+  return `<span class="${cls}">${v} / ${limit}</span>${s}`;
+}
+function modeBadge(mode) {
+  if (!mode) return '<span class="hint">—</span>';
+  if (/违规|强制/.test(mode)) return `<span class="badge badge-red">${esc(mode)}</span>`;
+  if (/系统收卷|时间到/.test(mode)) return `<span class="badge badge-yellow">${esc(mode)}</span>`;
+  return `<span class="badge badge-gray">${esc(mode)}</span>`;
+}
+function paceCell(p) {
+  if (!p) return '<span class="hint">—</span>';
+  return /连答|切回/.test(p) ? `<span class="cnt-warn">${esc(p)}</span>` : esc(p);
+}
+function switchCell(n) {
+  const v = Number(n) || 0;
+  return v ? `<span class="cnt-over">换设备 ${v} 次</span>` : '<span class="hint">—</span>';
+}
+function sessionLabel(t) {
+  return new Date(Number(t)).toLocaleString('zh-CN', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
 function renderLive(res) {
+  const L = res.limits || { blur:2, focus:2, translate:2 };
+  document.getElementById('liveLimits').textContent = `切屏 ${L.blur}／失焦 ${L.focus}／翻译 ${L.translate} 次`;
+
+  // 场次下拉：内容没变就不重画，避免自动刷新把老师正打开的选单关掉
+  const sel = document.getElementById('liveSession');
+  const opts = (res.sessions || []).map(s =>
+    `<option value="${esc(s.start)}">${s.start === res.currentStart ? '本场' : '旧场次'} · ${esc(sessionLabel(s.start))}（交卷 ${esc(s.submitted)} 人）</option>`).join('')
+    || '<option value="">尚无场次</option>';
+  if (sel.dataset.sig !== opts) { sel.innerHTML = opts; sel.dataset.sig = opts; }
+  sel.value = String(res.sessionStart || '');
+  liveSessionSel = res.isCurrent ? '' : String(res.sessionStart || '');
+  document.getElementById('liveEntryBtn').style.display = res.isCurrent ? '' : 'none';
+
   const s = res.summary;
-  const openBadge = res.open
-    ? '<span class="badge badge-green">考试开放中</span>'
+  const openBadge = !res.isCurrent ? '<span class="badge badge-gray">旧场次（只能查看与导出）</span>'
+    : res.open ? '<span class="badge badge-green">考试开放中</span>'
     : '<span class="badge badge-red">考试已关闭</span>';
   document.getElementById('liveStats').innerHTML = `
-    <div class="stat-card"><div class="stat-num">${s.submitted}</div><div class="stat-label">本场已交卷</div></div>
+    <div class="stat-card"><div class="stat-num">${s.inProgress}</div><div class="stat-label">${res.isCurrent ? '作答中' : '未交卷'}</div></div>
+    <div class="stat-card"><div class="stat-num">${s.submitted}</div><div class="stat-label">已交卷</div></div>
     <div class="stat-card"><div class="stat-num">${s.passed}</div><div class="stat-label">通过（≥50）</div></div>
-    <div class="stat-card"><div class="stat-num">${s.failed}</div><div class="stat-label">未通过</div></div>
     <div class="stat-card"><div class="stat-num">${s.passRate}%</div><div class="stat-label">通过率</div></div>
     <div class="stat-card"><div class="stat-num">${s.avg}</div><div class="stat-label">平均分</div></div>`;
-  const isAdmin = true;   // 一般管理员也可重考（权限与超级管理员相同，仅「账号管理」除外）
+
+  // 作答中名单：即时监考计数＋强制收卷
+  const ip = res.inProgress || [];
+  document.getElementById('liveInProgress').innerHTML = !res.isCurrent || !ip.length ? '' : `
+    <div class="live-block">
+      <div class="sub-title">作答中（${ip.length} 人）</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>学号</th><th>姓名</th><th>已答</th><th>剩余</th><th>切屏</th><th>失焦</th><th>翻译</th><th>设备</th><th>作答节奏</th><th>操作</th></tr></thead>
+        <tbody>${ip.map((r, i) => `<tr>
+          <td>${esc(r.studentId)}</td>
+          <td>${esc(r.name)}</td>
+          <td>${esc(r.answered)} / 50</td>
+          <td>${esc(fmtDur(r.remainingSec)) || '0'}</td>
+          <td>${cntCell(r.blur, L.blur, r.blurSec)}</td>
+          <td>${cntCell(r.focus, L.focus, r.focusSec)}</td>
+          <td>${cntCell(r.translate, L.translate)}</td>
+          <td>${switchCell(r.switches)}</td>
+          <td class="pace-cell">${paceCell(r.pace)}</td>
+          <td><button class="btn btn-danger btn-sm" onclick="forceSubmitAt(${i})">强制收卷</button></td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+      <p class="hint" style="margin-top:6px">「已答」是学生最后一次存档的题数（作答中约每 15 秒存一次）。强制收卷以这份存档计分，成绩照常计算。</p>
+    </div>`;
+
+  // 名册上还没进场的人
+  const miss = res.rosterMissing || [];
+  document.getElementById('liveRoster').innerHTML = !res.isCurrent || !res.rosterOn ? '' : `
+    <div class="live-block">
+      <div class="sub-title">名册上尚未进场（${miss.length} 人）</div>
+      ${miss.length ? `<div class="roster-chips">${miss.map(m => `<span>${esc(m.studentId)} ${esc(m.name)}</span>`).join('')}</div>`
+                    : '<p class="hint">名册上的人都已进场。</p>'}
+    </div>`;
+
+  // 交卷记录
+  const footer = document.getElementById('liveFooter');
+  footer.innerHTML = res.sessionStart ? `
+    <button class="btn btn-outline btn-sm" onclick="exportLiveXLSX()">导出${res.isCurrent ? '本场' : '这一场'}成绩 (.xlsx)</button>
+    ${!res.isCurrent || !res.open ? `<button class="btn btn-danger btn-sm" onclick="deleteLiveSession()">删除这一场全部成绩</button>` : ''}` : '';
   if (!res.sessionStart) {
-    document.getElementById('liveTable').innerHTML = `<p style="color:var(--gray-500);font-size:.88rem;padding-top:8px">${openBadge}　本场尚无记录（还没有人交卷，或考试从未开放过）。</p>`;
+    document.getElementById('liveTable').innerHTML = `<p style="color:var(--gray-500);font-size:.88rem;padding-top:8px">${openBadge}　尚无记录（考试从未开放过）。</p>`;
     return;
   }
   if (!res.records.length) {
-    document.getElementById('liveTable').innerHTML = `<p style="color:var(--gray-500);font-size:.88rem;padding-top:8px">${openBadge}　本场还没有人交卷。</p>`;
+    document.getElementById('liveTable').innerHTML = `<p style="color:var(--gray-500);font-size:.88rem;padding-top:8px">${openBadge}　这一场还没有人交卷。</p>`;
     return;
   }
+  const canReset = res.isCurrent;   // 重考只对本场有效
   const rows = res.records.map(r => `<tr>
     <td><a href="#" class="link" data-sid="${esc(r.studentId)}" onclick="openStudentDetail(this.dataset.sid);return false">${esc(r.studentId)}</a></td>
     <td>${esc(r.name)}</td>
@@ -841,18 +1058,29 @@ function renderLive(res) {
     <td>${r.passed ? '<span class="badge badge-green">通过</span>' : '<span class="badge badge-red">未通过</span>'}</td>
     <td>${esc(fmtTime(r.time))}</td>
     <td>${esc(fmtDur(r.timeTaken))}</td>
-    ${isAdmin ? `<td><button class="btn btn-warning btn-sm" data-sid="${esc(r.studentId)}" onclick="resetAttempt(this.dataset.sid)">重考</button></td>` : ''}
+    <td>${modeBadge(r.mode)}</td>
+    <td>${cntCell(r.blur, L.blur, r.blurSec)}</td>
+    <td>${cntCell(r.focus, L.focus, r.focusSec)}</td>
+    <td>${cntCell(r.translate, L.translate)}</td>
+    <td>${switchCell(r.switches)}</td>
+    <td class="pace-cell">${paceCell(r.pace)}</td>
+    ${canReset ? `<td><button class="btn btn-warning btn-sm" data-sid="${esc(r.studentId)}" onclick="resetAttempt(this.dataset.sid)">重考</button></td>` : ''}
   </tr>`).join('');
   document.getElementById('liveTable').innerHTML = `
     <p style="margin:0 0 10px">${openBadge}</p>
-    <table><thead><tr><th>学号</th><th>姓名</th><th>得分</th><th>结果</th><th>交卷时间</th><th>用时</th>${isAdmin?'<th>操作</th>':''}</tr></thead>
-    <tbody>${rows}</tbody></table>`;
+    <div class="sub-title">已交卷（${res.records.length} 人）</div>
+    <table><thead><tr><th>学号</th><th>姓名</th><th>得分</th><th>结果</th><th>交卷时间</th><th>用时</th><th>交卷方式</th><th>切屏</th><th>失焦</th><th>翻译</th><th>设备</th><th>作答节奏</th>${canReset?'<th>操作</th>':''}</tr></thead>
+    <tbody>${rows}</tbody></table>
+    <p class="hint" style="margin-top:6px">作答节奏只供参考、不自动处分：「20秒内连答≥6题」「切回后1分钟内答≥4题」可能是先查好答案再回来作答。</p>`;
 }
 
 function toggleLiveAuto() {
   if (document.getElementById('liveAuto').checked) {
     loadLive();
-    liveTimer = setInterval(loadLive, 30000);
+    liveTimer = setInterval(() => {
+      if (!document.hidden) markActivity();   // 开着监考页自动刷新＝老师在看，不要闲置登出
+      loadLive();
+    }, 30000);
   } else stopLiveAuto();
 }
 function stopLiveAuto() {
@@ -888,6 +1116,55 @@ async function resetAttempt(studentId) {
     } else alert(res.error || '操作失败');
   } catch { alert('连线失败'); }
   finally { unguard('resetAttempt'); }
+}
+
+// 强制收卷：以学生最后一次存档计分交卷
+async function forceSubmitAt(i) {
+  const r = liveData && liveData.inProgress[i];
+  if (!r) return;
+  const reason = prompt(`确定强制收回「${r.studentId} ${r.name}」的考卷吗？\n将以他最后一次存档（已答 ${r.answered} 题）计分交卷，成绩照常计算。\n\n可填写原因（会记入操作日志，可留空）：`, '');
+  if (reason === null) return;
+  if (!guard('forceSubmit')) return;
+  try {
+    const res = await api('POST', { action:'forceSubmit', token: session.token, studentId: r.studentId, reason });
+    if (res.success) { alert(`已收卷：${r.studentId} 得分 ${res.score}`); loadLive(); loadStudents(); }
+    else alert(res.error || '操作失败');
+  } catch { alert('连线失败'); }
+  finally { unguard('forceSubmit'); }
+}
+
+// 删除整场成绩（旧场次，或已关闭的本场）
+async function deleteLiveSession() {
+  const d = liveData;
+  if (!d || !d.sessionStart) return;
+  const label = sessionLabel(d.sessionStart);
+  const typed = prompt(`即将删除 ${label} 这一场的全部成绩（${d.records.length} 笔交卷记录与逐题明细），并依其余记录重算这些学生的院考最高分。\n\n建议先按「导出这一场成绩」留底。Google Sheets 的版本记录也可还原。\n\n确定要删除，请输入「删除」二字：`, '');
+  if (typed === null) return;
+  if (typed.trim() !== '删除') { alert('未输入「删除」，已取消'); return; }
+  if (!guard('deleteSession')) return;
+  try {
+    const res = await api('POST', { action:'deleteSession', token: session.token, session: d.sessionStart, confirm: typed.trim() });
+    if (res.success) {
+      alert(`已删除 ${res.removed} 笔交卷记录`);
+      liveSessionSel = '';
+      document.getElementById('liveSession').dataset.sig = '';
+      loadLive(); loadStudents(); loadExport();
+    } else alert(res.error || '操作失败');
+  } catch { alert('连线失败'); }
+  finally { unguard('deleteSession'); }
+}
+
+// 导出目前监考页这一场的成绩
+function exportLiveXLSX() {
+  const d = liveData;
+  if (!d || !d.records.length) { alert('这一场没有交卷记录'); return; }
+  const yn = v => v ? '是' : '否';
+  downloadXLSX(d.records.map(r => ({
+    '学号': r.studentId, '姓名': r.name, '得分': r.score, '通过': yn(r.passed),
+    '交卷时间': fmtTime(r.time), '作答时间(秒)': r.timeTaken, '交卷方式': r.mode || '',
+    '切屏次数': r.blur, '切屏秒数': r.blurSec, '失焦次数': r.focus, '失焦秒数': r.focusSec,
+    '翻译次数': r.translate, '换设备次数': r.switches, '作答节奏': r.pace
+  })), '场次成绩_' + new Date(Number(d.sessionStart)).toISOString().slice(0, 10));
 }
 
 // ════════════════════════════════════════════════
@@ -950,8 +1227,9 @@ function renderStudentDetail(res) {
       <td>${esc(r.score)}</td>
       <td>${(r.passed===true||r.passed==='TRUE') ? '<span class="badge badge-green">通过</span>' : '<span class="badge badge-red">未通过</span>'}</td>
       <td>${esc(fmtDur(r.timeTaken))}</td>
+      <td>${modeBadge(r.mode)}</td>
     </tr>`).join('')
-    : '<tr><td colspan="4" style="color:var(--gray-500)">尚无院考记录</td></tr>';
+    : '<tr><td colspan="5" style="color:var(--gray-500)">尚无院考记录</td></tr>';
 
   const isAdmin = true;   // 一般管理员也可重考（权限与超级管理员相同，仅「账号管理」除外）
   document.getElementById('sdBody').innerHTML = `
@@ -965,7 +1243,7 @@ function renderStudentDetail(res) {
     ${kv('院考通过', yn(s.passed))}
     <div style="margin-top:16px;font-weight:700;font-size:.92rem">院考历次记录（${recs.length}）</div>
     <div class="table-wrap" style="margin-top:8px">
-      <table><thead><tr><th>考试时间</th><th>得分</th><th>结果</th><th>用时</th></tr></thead><tbody>${recRows}</tbody></table>
+      <table><thead><tr><th>考试时间</th><th>得分</th><th>结果</th><th>用时</th><th>交卷方式</th></tr></thead><tbody>${recRows}</tbody></table>
     </div>
     ${isAdmin ? `<div style="margin-top:16px"><button class="btn btn-warning btn-sm" data-sid="${esc(s.studentId)}" onclick="resetAttempt(this.dataset.sid)">让 TA 重考本场（删除本场记录）</button></div>` : ''}`;
 }
@@ -1449,7 +1727,11 @@ function exportRecordsXLSX() {
   const yn = v => (v === true || v === 'TRUE') ? '是' : '否';   // 布林可能被序列化成字串 'TRUE'
   downloadXLSX(exportCache.records.map(r => ({
     '考试ID':r['考试ID'],'学号':r['学号'],'考试时间':r['考试时间'],
-    '得分':r['得分'],'通过':yn(r['通过']),'作答时间(秒)':r['作答时间(秒)']
+    '得分':r['得分'],'通过':yn(r['通过']),'作答时间(秒)':r['作答时间(秒)'],
+    // 以下为监考栏位（2026-10 起才有；更早的记录留空）
+    '交卷方式':r['交卷方式']||'','切屏次数':r['切屏次数'],'切屏秒数':r['切屏秒数'],
+    '失焦次数':r['失焦次数'],'失焦秒数':r['失焦秒数'],'翻译次数':r['翻译次数'],
+    '换设备次数':r['换设备次数'],'作答节奏':r['作答节奏']||''
   })), '考试记录');
 }
 
